@@ -22,7 +22,7 @@ class RankingEngine:
     Parola adaylarını şartname kriterlerine göre skorlayan ve önceliklendiren motor.
     
     Skorlama Kriterleri:
-    - Priority 1 (Skor: 90 - 100): Doğrudan hedef isim + yıl kombinasyonları, ilişki ikilileri, temel insan ekleri (örn: Nurcan123, AliSevda2021)
+    - Priority 1 (Skor: 90 - 100): Doğrudan hedef isim + yıl kombinasyonları, ilişki ikilileri, temel insan ekleri (örn: Ahmet123, AliSevda2021)
     - Priority 2 (Skor: 50 - 75) : Genel ek almış varyasyonlar (örn: Ali1234, Sevda!) ve ilgi alanı kombinasyonları
     - Priority 3 (Skor: 10 - 30) : Ağır Leetspeak ve karmaşık mutasyonlar (örn: @l1_2021)
     """
@@ -59,7 +59,7 @@ class RankingEngine:
         cand_lower = candidate.lower()
         score = 20  # Taban skor
 
-        # 1. İlişki çifti tespiti (AliSevda, NurcanWinki vb.)
+        # 1. İlişki çifti tespiti (AliSevda, AhmetPamuk vb.)
         is_relation = False
         for p1, p2 in self.effective_relations:
             if p1 in cand_lower and p2 in cand_lower:

@@ -161,7 +161,7 @@ class MockAuthService:
 
     def __init__(
         self,
-        target_password: str = "Winki2004!",
+        target_password: str = "Pamuk2021!",
         rate_limit_after: Optional[int] = None,
         lockout_after_failures: Optional[int] = None,
         captcha_after: Optional[int] = None,

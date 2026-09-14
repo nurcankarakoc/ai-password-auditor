@@ -10,7 +10,7 @@ Geleneksel körleme (brute-force) wordlist'lerin aksine, hedefin psikolojisi, ku
 
 - 🧠 **Yapay Zeka & Semantik NER:** Gemini LLM veya dahili çevrimdışı (Offline Regex NLP) motor ile serbest hedef metinlerinden yapılandırılmış profil (`TargetProfile`) çıkarımı.
 - 🎯 **İnteraktif Parola Politikası (Password Policy):** Hedef sistemin (Active Directory, Instagram, Şirket Portalı) kurallarına göre (Min/Max uzunluk, Büyük/Küçük harf, Rakam, Özel Karakter) dinamik filtreleme.
-- 👤 **İnsan Psikolojisi Odaklı Önceliklendirme:** `Nurcan123`, `Krakoç1`, `Asya123!` gibi en yaygın insan alışkanlıklarını doğrudan en tepeye alan katmanlı skorlama (P1, P2, P3).
+- 👤 **İnsan Psikolojisi Odaklı Önceliklendirme:** `Ahmet123`, `Yilmaz1`, `Demir123!` gibi en yaygın insan alışkanlıklarını doğrudan en tepeye alan katmanlı skorlama (P1, P2, P3).
 - 🛡️ **Kulüp ve Gürültü Zekası (Anti-Noise):** Hedef Fenerbahçeliyse listeye rakip kulüp yıllarının (`1903`, `1905`) sızmasını engeller; `20042004` gibi çifte tarih tekrarlarını otomatik ayıklar.
 - 📈 **3.000 - 10.000+ Aday Kapasitesi:** En sıkı kurallarda dahi kaliteli, zengin ve hedefe odaklı geniş parola havuzu üretimi.
 - ⚡ **Hafif ve Streaming (Akışkan):** RAM tüketimi sıfıra yakın (Python `generator / yield` mimarisi).
@@ -68,16 +68,16 @@ Menüye girmeden doğrudan Kali terminalinden tek satırla:
 python3 cybzenor.py targets
 
 # Belirli bir hedefin en olası ilk 20 parolasını incele
-python3 cybzenor.py view asya 20
+python3 cybzenor.py view target_01 20
 
 # Hedefin sonundaki Leetspeak mutasyonlarını incele
-python3 cybzenor.py tail asya 15
+python3 cybzenor.py tail target_01 15
 
 # Liste içinde kelime ara
-python3 cybzenor.py search Civciv asya
+python3 cybzenor.py search Pamuk target_01
 
 # Hedefin detaylı dosya ve politika kartını gör
-python3 cybzenor.py info asya
+python3 cybzenor.py info target_01
 ```
 
 ---

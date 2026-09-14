@@ -34,7 +34,7 @@ DELIMITERS = ['', '_', '.', '-', '*', '+']
 SPECIAL_CHARS = ['!', '.', '_', '*', '#', '@', '?', '$', '-']
 TOP_SPECIALS = ['!', '.', '_', '*', '#', '@']
 
-# İnsanların en çok kullandığı temel/basit son ekler (Nurcan123, Ali1, Sevda123! vb.)
+# İnsanların en çok kullandığı temel/basit son ekler (Ahmet123, Ali1, Sevda123! vb.)
 HUMAN_TOP_SUFFIXES = [
     '123', '1', '12', '123!', '!', '1!', '1234', '12345', '123456',
     '2024', '2025', '2026', '2027', 'qwe', 'asdf', '147', '258', '369', '147258',
@@ -201,7 +201,7 @@ class CandidateGenerator:
     Öncelik Kademeleri:
     - TIER 0 (AI & Semantik Zeka): LLM ve anlamsal modelin hedefin psikolojisine ve takımlarına göre ürettiği akıllı kalıplar
     - TIER 1 (En Yüksek Öncelik): İsim + Temel İnsan Ekleri (123, 1, !), İsim + Yıl (ve alt parçaları), İsim + Ayraç + Yıl,
-                                  Tüm İsimler arası Çapraz Kombinasyonlar (AliSevda, SevdaAli, NurcanWinki)
+                                  Tüm İsimler arası Çapraz Kombinasyonlar (AliSevda, SevdaAli, AhmetPamuk)
     - TIER 2 (Orta Öncelik)     : İsim/İlişki + Zengin Ekler (1234, 34, 147 vb.),
                                   Hedef Takım + Yıl, İlgi alanları + Ekler, Prefix wraps (!Ali!, _Ali_)
     - TIER 3 (Düşük Öncelik)    : Leetspeak mutasyonları + Tarihler / Ayraçlar / Ekler
@@ -336,7 +336,7 @@ class CandidateGenerator:
     def generate_tier_1_high_priority(self) -> Generator[str, None, None]:
         """
         Tier 1: En yüksek olasılıklı adaylar (Doğrudan hedefin isimleri, yılları, ilişkileri ve temel insan şifreleri).
-        Örn: Nurcan123, Nurcan, Nurcan2004, Nurcan_04, Nurcan123!, AliSevda2021
+        Örn: Ahmet123, Ahmet, Ahmet2004, Ahmet_04, Ahmet123!, AliSevda2021
         """
         base_words = self.profile.names + self.profile.keywords
 
@@ -347,7 +347,7 @@ class CandidateGenerator:
                 # Yalın isim
                 yield from self._yield_unique(wc)
 
-                # İnsanların en çok kullandığı temel basit son ekler (Nurcan123, Nurcan1, Nurcan123!, Nurcan!)
+                # İnsanların en çok kullandığı temel basit son ekler (Ahmet123, Ahmet1, Ahmet123!, Ahmet!)
                 for h_suf in HUMAN_TOP_SUFFIXES:
                     yield from self._yield_unique(f"{wc}{h_suf}")
                     yield from self._yield_unique(f"{wc}_{h_suf}")
@@ -403,7 +403,7 @@ class CandidateGenerator:
                             yield from self._yield_unique(f"{wc}_{loc}_{date}{sp}")
                             yield from self._yield_unique(f"{wc}.{loc}.{date}{sp}")
 
-        # 2. İlişki İkilileri (effective_relations: AliSevda, AsyaCivciv, Asya34 vb.)
+        # 2. İlişki İkilileri (effective_relations: AliSevda, AhmetPamuk, Ahmet34 vb.)
         for p1, p2 in self.effective_relations:
             p1_cases = get_casing_variations(p1)
             p2_cases = get_casing_variations(p2)
@@ -439,7 +439,7 @@ class CandidateGenerator:
     def generate_tier_2_medium_priority(self) -> Generator[str, None, None]:
         """
         Tier 2: Orta olasılıklı adaylar (Genel son ekler, ilgi alanları, takımlar, prefix wraps, triples).
-        Örn: Ali1234!, Sevda35!, fenerbahce1907!, Ali1907!, !Nurcan!
+        Örn: Ali1234!, Sevda35!, fenerbahce1907!, Ali1907!, !Ahmet!
         """
         base_words = self.profile.names + self.profile.interests + self.profile.keywords
 
@@ -474,7 +474,7 @@ class CandidateGenerator:
                         yield from self._yield_unique(f"{wc}{date}{sp}")
                         yield from self._yield_unique(f"{wc}_{date}{sp}")
 
-                    # İsim + Tarih + Ekler (örn: Nurcan2004123!, Nurcan_04_123)
+                    # İsim + Tarih + Ekler (örn: Ahmet2004123!, Ahmet_04_123)
                     for sfx in ['123', '1', '12', '!', '123!', '34', '06', '35', '01']:
                         yield from self._yield_unique(f"{wc}{date}{sfx}")
                         yield from self._yield_unique(f"{wc}_{date}_{sfx}")

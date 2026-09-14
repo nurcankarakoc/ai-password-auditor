@@ -372,16 +372,16 @@ def print_command_help() -> None:
     print_header("CYBZENOR / SİBER KOMUT SATIRI KILAVUZU")
     print("Menü numarası [1-7] girmek yerine aşağıdaki profesyonel komutları yazabilirsiniz:\n")
     print(f" {Fore.CYAN}targets / list / ls{Style.RESET_ALL}     : Tüm hedefleri (Dossiers), profil bilgileri ve sayılarıyla listeler.")
-    print(f" {Fore.CYAN}use <hedef veya no>{Style.RESET_ALL}     : Bir hedefi AKTİF yapar (Örn: 'use krakoç' veya 'use 1').")
+    print(f" {Fore.CYAN}use <hedef veya no>{Style.RESET_ALL}     : Bir hedefi AKTİF yapar (Örn: 'use target_01' veya 'use 1').")
     print(f" {Fore.CYAN}view [n]{Style.RESET_ALL}                : Aktif/seçili hedefin ilk n (örn: 10) parolasını görüntüler.")
-    print(f" {Fore.CYAN}view <hedef> [n]{Style.RESET_ALL}        : İstenen hedefin ilk n parolasını görüntüler (Örn: 'view krakoç 15').")
+    print(f" {Fore.CYAN}view <hedef> [n]{Style.RESET_ALL}        : İstenen hedefin ilk n parolasını görüntüler (Örn: 'view target_01 15').")
     print(f" {Fore.CYAN}tail [n]{Style.RESET_ALL}                : Hedefin son n parolasını görüntüler.")
     print(f" {Fore.CYAN}info <hedef>{Style.RESET_ALL}            : Hedefin toplanan tüm OSINT profil detaylarını gösterir.")
-    print(f" {Fore.CYAN}search <kelime>{Style.RESET_ALL}         : Wordlist içinde arama yapar (Örn: 'search winki').")
+    print(f" {Fore.CYAN}search <kelime>{Style.RESET_ALL}         : Wordlist içinde arama yapar (Örn: 'search pamuk').")
     print(f" {Fore.CYAN}unuse / back{Style.RESET_ALL}            : Aktif hedef seçimini temizler.")
     print(f" {Fore.CYAN}help / ?{Style.RESET_ALL}                : Bu yardım ekranını gösterir.")
     print(f" {Fore.CYAN}exit / q{Style.RESET_ALL}                : Programdan çıkar.\n")
-    print(f"{Fore.LIGHTBLACK_EX}Örnek: 'targets' yazıp hedefleri görebilir, 'use krakoç' ile aktif edip 'view 10' diyebilirsiniz.{Style.RESET_ALL}")
+    print(f"{Fore.LIGHTBLACK_EX}Örnek: 'targets' yazıp hedefleri görebilir, 'use target_01' ile aktif edip 'view 10' diyebilirsiniz.{Style.RESET_ALL}")
 
 
 def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
@@ -487,7 +487,7 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
     # 8. Arama (search / find / ara)
     if cmd in ["search", "find", "ara", "grep"]:
         if len(args) == 0:
-            print_error("Lütfen aranacak kelimeyi belirtin. Örn: 'search winki'")
+            print_error("Lütfen aranacak kelimeyi belirtin. Örn: 'search pamuk'")
             maybe_pause()
             return True
         query = args[0]

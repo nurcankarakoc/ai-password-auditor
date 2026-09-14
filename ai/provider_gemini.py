@@ -79,7 +79,7 @@ class GeminiAIProvider(BaseAIProvider):
             f"1. Beşiktaşlıysa asla '1907' veya '1905' ekleme; '1903', 'bjk', 'kartal' ekle.\n"
             f"2. Fenerbahçeliyse '1907', 'fener', 'fb' ekle; Galatasaraylıysa '1905', 'gs', 'aslan' ekle.\n"
             f"3. Saçma karakter kombinasyonları ('?!' gibi) asla üretme.\n"
-            f"4. İsimleri evcil hayvanla, doğum yılıyla, sevdiği renkle mantıklı birleştir (örn: 'ercan_bjk', 'mavi2007', 'ercan1903', 'Bjk.Ercan').\n"
+            f"4. İsimleri evcil hayvanla, doğum yılıyla, sevdiği renkle mantıklı birleştir (örn: 'ahmet_bjk', 'pamuk2007', 'ahmet1903', 'Bjk.Ahmet').\n"
             f"Yanıtı SADECE JSON formatında bir string listesi olarak ver: [\"kalip1\", \"kalip2\", ...]"
         )
 
@@ -133,7 +133,7 @@ class GeminiAIProvider(BaseAIProvider):
             roots.add(nl)
             roots.add(nc)
 
-            # 2. İsim + İlgili Takımın DOĞRU sembolü (örn: ercan1903, ErcanBjk)
+            # 2. İsim + İlgili Takımın DOĞRU sembolü (örn: ahmet1903, AhmetBjk)
             for ts in team_symbols:
                 roots.add(f"{nl}{ts}")
                 roots.add(f"{nc}{ts}")
@@ -154,13 +154,13 @@ class GeminiAIProvider(BaseAIProvider):
                 roots.add(f"{nc}{loc}")
                 roots.add(f"{nc}_{loc}")
 
-            # 5. İsim + Özel Renk / Kelime (örn: ercan_mor, ErcanMavi)
+            # 5. İsim + Özel Renk / Kelime (örn: ahmet_mor, AhmetMavi)
             for kw in profile.keywords:
                 roots.add(f"{nl}{kw.lower()}")
                 roots.add(f"{nc}{kw.capitalize()}")
                 roots.add(f"{nc}_{kw.lower()}")
 
-        # Hayvan veya diğer isimler arası ikili mantıksal hibritler (örn: ercan_mavi, maviercan2007)
+        # Hayvan veya diğer isimler arası ikili mantıksal hibritler (örn: ahmet_pamuk, pamukahmet2007)
         if len(profile.names) >= 2:
             n1, n2 = profile.names[0], profile.names[1]
             roots.add(f"{n1.capitalize()}{n2.capitalize()}")
@@ -237,7 +237,7 @@ class GeminiAIProvider(BaseAIProvider):
                 interests.add(club)
 
         # 4. Doğal Dil Türkçe Kalıp Çıkarımı (NLP Pattern Matching)
-        # Örn: "annesi altun", "babası şener", "eşi sevda", "kızı elif", "oğlu can", "hayvanı winki", "köpeği karabaş"
+        # Örn: "annesi fatma", "babası mehmet", "eşi sevda", "kızı elif", "oğlu can", "hayvanı pamuk", "köpeği karabaş"
         nlp_patterns = [
             (r'\b(?:annesi|annem|anası)\s+([a-zA-ZçğıöşüÇĞİÖŞÜ]+)', names),
             (r'\b(?:babası|babam)\s+([a-zA-ZçğıöşüÇĞİÖŞÜ]+)', names),
@@ -276,7 +276,7 @@ class GeminiAIProvider(BaseAIProvider):
                     locations.add(val.capitalize())
                     continue
 
-            # Serbest metin içindeki büyük harfli kelimeleri yakala (örn: Nurcan Karakoç)
+            # Serbest metin içindeki büyük harfli kelimeleri yakala (örn: Ahmet Yılmaz)
             words = re.findall(r'\b[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ0-9_]{2,}\b', line)
             for w in words:
                 w_lower = w.lower()

@@ -125,7 +125,7 @@ class TestCandidateGeneratorEngine:
     def test_cross_relations_between_all_names(self):
         """Profilde açık ilişki tanımlanmasa dahi tüm isimlerin çaprazlandığını doğrula."""
         p = TargetProfile(
-            names=["Nurcan", "Winki", "Altun"],
+            names=["Ahmet", "Pamuk", "Yilmaz"],
             dates=["2004"],
             locations=[],
             interests=[],
@@ -135,14 +135,14 @@ class TestCandidateGeneratorEngine:
         gen = CandidateGenerator(p)
         cands = list(gen.generate_all())
 
-        # Nurcan & Winki, Nurcan & Altun çaprazları bulunmalı
-        assert any("NurcanWinki" in c or "WinkiNurcan" in c for c in cands)
-        assert any("NurcanAltun" in c or "AltunNurcan" in c for c in cands)
+        # Ahmet & Pamuk, Ahmet & Yilmaz çaprazları bulunmalı
+        assert any("AhmetPamuk" in c or "PamukAhmet" in c for c in cands)
+        assert any("AhmetYilmaz" in c or "YilmazAhmet" in c for c in cands)
 
     def test_high_volume_generation_realistic_counts(self):
         """Zengin bir profilde 1500+ parola adayı üretildiğini doğrula."""
         p = TargetProfile(
-            names=["Nurcan", "Winki", "Altun", "Sener"],
+            names=["Ahmet", "Pamuk", "Yilmaz", "Kaya"],
             dates=["2004"],
             locations=["34"],
             interests=["besiktas"],
@@ -213,9 +213,9 @@ class TestCandidateGeneratorEngine:
         assert not any("1905" in c for c in cands)
 
     def test_human_basic_patterns_generated(self):
-        """İnsanların en çok kullandığı Nurcan123, Nurcan1, Nurcan! gibi temel kalıpların üretildiğini doğrula."""
+        """İnsanların en çok kullandığı Ahmet123, Ahmet1, Ahmet! gibi temel kalıpların üretildiğini doğrula."""
         p = TargetProfile(
-            names=["Nurcan"],
+            names=["Ahmet"],
             dates=["2004"],
             locations=[],
             interests=[],
@@ -225,9 +225,9 @@ class TestCandidateGeneratorEngine:
         gen = CandidateGenerator(p)
         tier1 = list(gen.generate_tier_1_high_priority())
 
-        # Nurcan123, Nurcan1, Nurcan! Tier 1 içinde yer almalı
-        assert "Nurcan123" in tier1
-        assert "Nurcan1" in tier1
-        assert "Nurcan!" in tier1
-        assert "Nurcan123!" in tier1
+        # Ahmet123, Ahmet1, Ahmet! Tier 1 içinde yer almalı
+        assert "Ahmet123" in tier1
+        assert "Ahmet1" in tier1
+        assert "Ahmet!" in tier1
+        assert "Ahmet123!" in tier1
 

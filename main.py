@@ -174,7 +174,7 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
 
     # 1. İsimler
     print(f"{Fore.CYAN}1. Hedef Kişi, Aile Üyeleri veya Evcil Hayvan İsimleri:{Style.RESET_ALL}")
-    print(f"{Fore.LIGHTBLACK_EX}   Örn: Ercan, Nurcan, Mavi, Winki, Altun, Şener (virgülle ayırabilirsiniz){Style.RESET_ALL}")
+    print(f"{Fore.LIGHTBLACK_EX}   Örn: Ahmet, Mehmet, Ayşe, Pamuk, Yılmaz, Kaya (virgülle ayırabilirsiniz){Style.RESET_ALL}")
     names_input = input(f"{Fore.GREEN}   > İsimler: {Style.RESET_ALL}").strip()
     names = [n.strip().capitalize() for n in re.split(r'[,/&+\s]+|\s+ve\s+', names_input) if len(n.strip()) >= 2] if names_input else []
 
