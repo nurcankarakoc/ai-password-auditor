@@ -8,7 +8,7 @@ import re
 from typing import NoReturn, Optional, List, Dict, Any
 from colorama import Fore, Style
 
-from config.settings import settings
+from config.settings import settings, BASE_DIR
 from utils.logger import logger
 from utils.platform_helper import (
     setup_terminal_encoding,
