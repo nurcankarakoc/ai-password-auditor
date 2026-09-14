@@ -1,0 +1,17 @@
+{
+  "target_id": "target_01_ali_yilmaz",
+  "target_name": "Ali Yılmaz",
+  "profile": {
+    "names": ["Ali", "Sevda", "Yılmaz"],
+    "dates": ["1992", "2021"],
+    "locations": ["İstanbul", "34"],
+    "interests": ["fenerbahce"],
+    "relations": [["Ali", "Sevda"]],
+    "keywords": ["developer", "kartal"]
+  },
+  "ground_truth": {
+    "plain_password_hint": "Hedefin evlilik yılı ve eşinin ismiyle oluşturduğu parola (AliSevda2021)",
+    "hash_type": "sha256",
+    "target_hash": "087764eb6c8c39afc5f90eb051681ba5ab5c994c4c715c5a8ea537c09b4c7f19"
+  }
+}

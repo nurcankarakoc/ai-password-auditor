@@ -1,0 +1,25 @@
+{
+  "app_name": "Smart Password Auditor",
+  "version": "1.0.0",
+  "log_level": "INFO",
+  "mask_sensitive_data": true,
+  "wordlist": {
+    "min_length": 6,
+    "max_length": 32,
+    "max_candidates": 500000,
+    "deduplicate": true,
+    "case_sensitive_dedup": false
+  },
+  "rules": {
+    "include_leetspeak": true,
+    "include_dates": true,
+    "include_relations": true,
+    "include_common_suffixes": true,
+    "common_suffixes": ["123", "!", "1", "12", "1234", "123!", "34", "06", "35"]
+  },
+  "safety": {
+    "max_consecutive_failures": 50,
+    "abort_on_rate_limit": true,
+    "mock_audit_delay_ms": 10
+  }
+}

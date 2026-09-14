@@ -1,0 +1,17 @@
+{
+  "target_id": "target_02_canan_kaya",
+  "target_name": "Canan Kaya",
+  "profile": {
+    "names": ["Canan", "Kaya", "Pamuk"],
+    "dates": ["1988", "2015"],
+    "locations": ["İzmir", "35"],
+    "interests": ["galatasaray", "kedi"],
+    "relations": [["Canan", "Pamuk"]],
+    "keywords": ["mimar"]
+  },
+  "ground_truth": {
+    "plain_password_hint": "Hedefin kedisi ve doğum yılı (Pamuk1988)",
+    "hash_type": "sha256",
+    "target_hash": "a0bee5ce2b0264f29e45eec6ac67949856a7e966552cf1eb641baac1a9047b7a"
+  }
+}
