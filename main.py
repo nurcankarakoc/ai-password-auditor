@@ -594,8 +594,9 @@ def handle_benchmark_module() -> None:
             try:
                 with open(sfile, "r", encoding="utf-8") as f:
                     sdata = json.load(f)
-                pname = sdata.get("target_id", sfile.stem)
-                pw = sdata.get("ground_truth_password", "Bilinmiyor")
+                pname = sdata.get("target_name") or sdata.get("target_id", sfile.stem)
+                gt = sdata.get("ground_truth", {}) if isinstance(sdata.get("ground_truth"), dict) else {}
+                pw = gt.get("plain_password_hint") or sdata.get("ground_truth_password", "Bilinmiyor")
                 print(f" {Fore.CYAN}[{idx}]{Style.RESET_ALL} {pname} (Ground Truth: {pw})")
             except Exception:
                 print(f" {Fore.CYAN}[{idx}]{Style.RESET_ALL} {sfile.name}")
@@ -610,8 +611,9 @@ def handle_benchmark_module() -> None:
             chosen_file = synthetic_files[int(choice) - 1]
             with open(chosen_file, "r", encoding="utf-8") as f:
                 sdata = json.load(f)
-            target_hash = sdata.get("sha256_hash")
-            target_label = sdata.get("target_id", chosen_file.stem)
+            gt = sdata.get("ground_truth", {}) if isinstance(sdata.get("ground_truth"), dict) else {}
+            target_hash = gt.get("target_hash") or sdata.get("sha256_hash")
+            target_label = sdata.get("target_name") or sdata.get("target_id", chosen_file.stem)
         elif choice == str(len(synthetic_files) + 1):
             user_in = input(f"{Fore.GREEN}Hedef SHA-256 Hash veya Parola: {Style.RESET_ALL}").strip()
             if not user_in:
@@ -639,9 +641,22 @@ def handle_benchmark_module() -> None:
     targeted_files = sorted(generated_dir.glob("ai_targeted_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
     hybrid_files = sorted(generated_dir.glob("hybrid_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
 
-    if not targeted_files or not hybrid_files:
-        print_warning("\nKıyaslama için hem AI Hedefli (Menü [2]) hem de Hibrit (Menü [3]) liste üretilmiş olmalıdır.")
-        print_info("Mevcut listeler kontrol ediliyor...")
+    if not targeted_files and "profile" in sdata:
+        print_info(f"'{target_label}' için AI Hedefli Wordlist otomatik üretiliyor...")
+        from ai.schemas import TargetProfile
+        from core.ranking_engine import RankingEngine
+        prof_obj = TargetProfile(**sdata["profile"])
+        r_engine = RankingEngine(prof_obj)
+        auto_target_path, _ = r_engine.build_targeted_wordlist()
+        targeted_files = [auto_target_path]
+
+    if not hybrid_files and targeted_files and "profile" in sdata:
+        print_info("Hibrit Wordlist otomatik birleştiriliyor...")
+        from ai.schemas import TargetProfile
+        from core.ranking_engine import RankingEngine
+        h_engine = RankingEngine(TargetProfile(**sdata["profile"]))
+        auto_hybrid_path, _ = h_engine.build_hybrid_wordlist()
+        hybrid_files = [auto_hybrid_path]
 
     targeted_path = targeted_files[0] if targeted_files else default_path
     hybrid_path = hybrid_files[0] if hybrid_files else default_path
