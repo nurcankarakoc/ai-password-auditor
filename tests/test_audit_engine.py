@@ -87,3 +87,34 @@ class TestLocalHashAuditEngine:
         assert result.matched is True
         assert result.matched_password == "AliSevda2021"
         assert result.position == 3
+
+    def test_save_target_profile_to_disk(self, tmp_path: Path, monkeypatch):
+        """save_target_profile_to_disk hedef profilini ve hash'ini diske kaydediyor mu?"""
+        from ai.schemas import TargetProfile
+        from main import save_target_profile_to_disk
+
+        monkeypatch.setattr("main.BASE_DIR", tmp_path)
+
+        # Kullanıcı girdilerini simüle et: İsim = "Test Hedef", Parola = "Gizli123!"
+        inputs = iter(["Test Hedef", "Gizli123!"])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+        profile = TargetProfile(
+            names=["Test", "Hedef"],
+            dates=["2024"],
+            locations=["Ankara"],
+            interests=["kodlama"]
+        )
+
+        saved_path = save_target_profile_to_disk(profile)
+        assert saved_path is not None
+        assert saved_path.is_file()
+
+        import json
+        with open(saved_path, "r", encoding="utf-8") as f:
+            saved_data = json.load(f)
+
+        assert saved_data["target_name"] == "Test Hedef"
+        assert saved_data["target_id"] == "target_test_hedef"
+        assert saved_data["ground_truth"]["plain_password_hint"] == "Gizli123!"
+        assert len(saved_data["ground_truth"]["target_hash"]) == 64

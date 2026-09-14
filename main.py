@@ -5,6 +5,9 @@ Kullanıcı arayüzü, interaktif menü döngüsü ve operasyonel modül yönlen
 
 import sys
 import re
+import json
+import hashlib
+from pathlib import Path
 from typing import NoReturn, Optional, List, Dict, Any
 from colorama import Fore, Style
 
@@ -88,7 +91,11 @@ def handle_default_wordlist_operations() -> None:
 
         elif sub_choice == "2":
             try:
-                output_file = wordlist_manager.generated_dir / "default_cleaned.txt"
+                custom_cl = input(f"{Fore.CYAN}Temizlenmiş liste dosya adı [ENTER = default_cleaned.txt]: {Style.RESET_ALL}").strip()
+                out_name = custom_cl if custom_cl else "default_cleaned.txt"
+                if not out_name.lower().endswith(".txt"):
+                    out_name += ".txt"
+                output_file = wordlist_manager.generated_dir / out_name
                 print_info(f"Filtreleme başlatılıyor (Min: {settings.wordlist.min_length}, Max: {settings.wordlist.max_length})...")
                 
                 meta = wordlist_manager.process_and_save(
@@ -99,7 +106,7 @@ def handle_default_wordlist_operations() -> None:
                     case_sensitive=settings.wordlist.case_sensitive_dedup
                 )
                 
-                print_success("Filtreleme ve tekilleştirme tamamlandı!")
+                print_success(f"Filtreleme ve tekilleştirme tamamlandı! Dosya: {output_file.name}")
                 print(f" • Kaynak Satır     : {meta['total_source_lines']:,}")
                 print(f" • Kaydedilen Satır : {meta['unique_written_lines']:,}")
                 print(f" • Elenen/Mükerrer  : {meta['filtered_or_duplicate_lines']:,}")
@@ -296,6 +303,43 @@ def collect_password_policy_interactively() -> PasswordPolicy:
     return policy
 
 
+def save_target_profile_to_disk(profile: TargetProfile) -> Optional[Path]:
+    """Kullanıcının girdiği hedef profilini data/synthetic_profiles/ klasörüne kaydeder."""
+    import hashlib
+    synthetic_dir = BASE_DIR / "data" / "synthetic_profiles"
+    synthetic_dir.mkdir(parents=True, exist_ok=True)
+
+    default_name = " ".join(profile.names[:2]) if profile.names else "Yeni Hedef"
+    t_name = input(f"\n{Fore.CYAN}Kayıtlı Hedef Adı / Açıklaması [ENTER = {default_name}]: {Style.RESET_ALL}").strip() or default_name
+
+    slug = re.sub(r'[^a-zA-Z0-9_]', '_', t_name.lower()).strip('_') or "target"
+    slug_file = synthetic_dir / f"target_{slug}.json"
+
+    print(f"{Fore.LIGHTBLACK_EX}İpucu: Benchmark veya hash testlerinde kullanılacak doğru test parolasını (Ground Truth) belirtebilirsiniz.{Style.RESET_ALL}")
+    pwd_hint = input(f"{Fore.CYAN}Test parolası (Ground Truth) [Boş bırakılabilir]: {Style.RESET_ALL}").strip()
+    target_hash = ""
+    if pwd_hint:
+        target_hash = hashlib.sha256(pwd_hint.encode("utf-8")).hexdigest()
+
+    data = {
+        "target_id": f"target_{slug}",
+        "target_name": t_name,
+        "profile": profile.to_detailed_dict(),
+        "ground_truth": {
+            "plain_password_hint": pwd_hint or f"{t_name} hedef profili",
+            "hash_type": "sha256",
+            "target_hash": target_hash
+        }
+    }
+
+    with open(slug_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    print_success(f"Hedef profil başarıyla kaydedildi: data/synthetic_profiles/{slug_file.name}")
+    print_info("Bu hedef artık [4] Hash Denetim Motoru ve [6] Kıyaslama Modülü hedefleri arasında seçilebilir!")
+    return slug_file
+
+
 def handle_targeted_wordlist_generation() -> None:
     """[2] AI Targeted Wordlist Generation operasyonu."""
     clear_screen()
@@ -311,7 +355,19 @@ def handle_targeted_wordlist_generation() -> None:
     # Hedef sistem parola politikasını al (İsteğe bağlı)
     policy = collect_password_policy_interactively()
 
-    confirm = input(f"\n{Fore.YELLOW}Bu profil ve politikayla hedefli parola listesi üretilsin mi? [E/h]: {Style.RESET_ALL}").strip().lower()
+    # Dosya adını belirle
+    target_slug = profile.names[0].lower() if profile.names else "target"
+    default_filename = f"ai_targeted_{target_slug}.txt"
+
+    print_header("KAYIT VE DOSYA ADI YAPILANDIRMASI")
+    print(f"{Fore.LIGHTBLACK_EX}Üretilen liste 'wordlists/generated/' dizinine kaydedilecektir.{Style.RESET_ALL}")
+    custom_name = input(f"{Fore.CYAN}Kaydedilecek Wordlist dosya adı [ENTER = {default_filename}]: {Style.RESET_ALL}").strip()
+    if custom_name:
+        chosen_filename = custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
+    else:
+        chosen_filename = default_filename
+
+    confirm = input(f"\n{Fore.YELLOW}'{chosen_filename}' adıyla parola listesi üretilsin mi? [E/h]: {Style.RESET_ALL}").strip().lower()
     if confirm in ('h', 'hayir', 'n', 'no'):
         print_info("İşlem kullanıcı tarafından iptal edildi.")
         pause_prompt()
@@ -320,10 +376,11 @@ def handle_targeted_wordlist_generation() -> None:
     try:
         print_info("Akıllı kural motoru, parola filtresi ve skorlama çalışıyor...")
         engine = RankingEngine(profile, policy=policy)
-        output_file, meta = engine.build_targeted_wordlist()
+        output_file, meta = engine.build_targeted_wordlist(output_filename=chosen_filename)
 
-        print_success("Yapay Zeka Hedefli Wordlist Başarıyla Üretildi!")
-        print(f" • Dosya Yolu       : {output_file}")
+        print_success("Yapay Zeka Hedefli Wordlist Başarıyla Üretildi ve Kaydedildi!")
+        print(f" • Dosya Adı        : {Fore.GREEN}{Style.BRIGHT}{output_file.name}{Style.RESET_ALL}")
+        print(f" • Tam Dosya Yolu   : {output_file}")
         print(f" • Parola Politikası: {meta.get('password_policy', 'Varsayılan')}")
         print(f" • Toplam Aday      : {meta['total_candidates']:,}")
         print(f" • Priority 1 (Yüksek Öncelik): {meta['priority_distribution']['priority_1_high']:,}")
@@ -331,6 +388,10 @@ def handle_targeted_wordlist_generation() -> None:
         print(f" • Priority 3 (Düşük/Leet)    : {meta['priority_distribution']['priority_3_low']:,}")
         print(f" • Geçen Süre       : {meta['duration_seconds']} sn")
         print(f" • Metadata         : {output_file.name}.metadata.json")
+
+        save_prof = input(f"\n{Fore.YELLOW}Bu hedef profilini kalıcı hedefler (Benchmark/Denetim) arasına kaydetmek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
+        if save_prof not in ('h', 'hayir', 'n', 'no'):
+            save_target_profile_to_disk(profile)
 
     except Exception as e:
         logger.exception(f"Hedefli wordlist üretim hatası: {e}")
@@ -354,19 +415,41 @@ def handle_hybrid_wordlist_generation() -> None:
     # Hedef sistem parola politikasını al (İsteğe bağlı)
     policy = collect_password_policy_interactively()
 
+    target_slug = profile.names[0].lower() if profile.names else "target"
+    default_filename = f"hybrid_{target_slug}.txt"
+
+    print_header("KAYIT VE DOSYA ADI YAPILANDIRMASI")
+    print(f"{Fore.LIGHTBLACK_EX}Üretilen hibrit liste 'wordlists/generated/' dizinine kaydedilecektir.{Style.RESET_ALL}")
+    custom_name = input(f"{Fore.CYAN}Kaydedilecek Hibrit Wordlist dosya adı [ENTER = {default_filename}]: {Style.RESET_ALL}").strip()
+    if custom_name:
+        chosen_filename = custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
+    else:
+        chosen_filename = default_filename
+
+    confirm = input(f"\n{Fore.YELLOW}'{chosen_filename}' adıyla hibrit wordlist üretilsin mi? [E/h]: {Style.RESET_ALL}").strip().lower()
+    if confirm in ('h', 'hayir', 'n', 'no'):
+        print_info("İşlem kullanıcı tarafından iptal edildi.")
+        pause_prompt()
+        return
+
     try:
         print_info("AI hedefe yönelik liste üretiliyor ve genel listeyle birleştiriliyor...")
         engine = RankingEngine(profile, policy=policy)
-        output_file, meta = engine.build_hybrid_wordlist()
+        output_file, meta = engine.build_hybrid_wordlist(output_filename=chosen_filename)
 
-        print_success("Hibrit Wordlist Başarıyla Üretildi!")
-        print(f" • Dosya Yolu       : {output_file}")
+        print_success("Hibrit Wordlist Başarıyla Üretildi ve Kaydedildi!")
+        print(f" • Dosya Adı        : {Fore.GREEN}{Style.BRIGHT}{output_file.name}{Style.RESET_ALL}")
+        print(f" • Tam Dosya Yolu   : {output_file}")
         print(f" • Parola Politikası: {meta.get('password_policy', 'Varsayılan')}")
         print(f" • Toplam Aday      : {meta['total_candidates']:,}")
         print(f" • AI Hedefli Aday  : {meta['targeted_candidates']:,}")
         print(f" • Genel Liste Aday : {meta['default_candidates']:,}")
         print(f" • Geçen Süre       : {meta['duration_seconds']} sn")
         print(f" • Metadata         : {output_file.name}.metadata.json")
+
+        save_prof = input(f"\n{Fore.YELLOW}Bu hedef profilini kalıcı hedefler (Benchmark/Denetim) arasına kaydetmek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
+        if save_prof not in ('h', 'hayir', 'n', 'no'):
+            save_target_profile_to_disk(profile)
 
     except Exception as e:
         logger.exception(f"Hibrit liste üretim hatası: {e}")
@@ -587,6 +670,7 @@ def handle_benchmark_module() -> None:
 
     target_hash = None
     target_label = None
+    sdata: Dict[str, Any] = {}
 
     if synthetic_files:
         print(f"{Fore.YELLOW}Kayıtlı Sentetik Hedefler:{Style.RESET_ALL}")
@@ -623,6 +707,7 @@ def handle_benchmark_module() -> None:
             else:
                 target_hash = LocalHashAuditEngine.compute_hash_sha256(user_in)
             target_label = "Manuel Hedef"
+            sdata = {}
     else:
         user_in = input(f"{Fore.GREEN}Hedef SHA-256 Hash veya Açık Parola girin: {Style.RESET_ALL}").strip()
         if not user_in:
@@ -632,34 +717,57 @@ def handle_benchmark_module() -> None:
         else:
             target_hash = LocalHashAuditEngine.compute_hash_sha256(user_in)
         target_label = "Manuel Hedef"
+        sdata = {}
 
     # Wordlist yollarını belirle
     default_path = wordlist_manager.default_wordlist_path
     generated_dir = BASE_DIR / "wordlists" / "generated"
 
-    # AI Hedefli ve Hibrit listeleri bul
-    targeted_files = sorted(generated_dir.glob("ai_targeted_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # wordlists/generated altındaki tüm txt dosyalarını topla
+    all_gen_files = sorted([f for f in generated_dir.glob("*.txt") if f.is_file()], key=lambda p: p.stat().st_mtime, reverse=True)
+
+    targeted_path = None
+    hybrid_path = None
+
+    if all_gen_files:
+        print(f"\n{Fore.YELLOW}Kıyaslamada Yarıştırılacak Hedefli Wordlist:{Style.RESET_ALL}")
+        for idx, gf in enumerate(all_gen_files, 1):
+            print(f" {Fore.CYAN}[{idx}]{Style.RESET_ALL} {gf.name} ({round(gf.stat().st_size / 1024, 1)} KB)")
+        print(f" {Fore.CYAN}[A]{Style.RESET_ALL} Otomatik Eşleştir (En son üretilen liste)")
+
+        wl_choice = input(f"{Fore.GREEN}Seçiminiz [1-{len(all_gen_files)} veya A]: {Style.RESET_ALL}").strip().upper()
+        if wl_choice.isdigit() and 1 <= int(wl_choice) <= len(all_gen_files):
+            targeted_path = all_gen_files[int(wl_choice) - 1]
+
+    if not targeted_path:
+        targeted_files = sorted(generated_dir.glob("ai_targeted_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if targeted_files:
+            targeted_path = targeted_files[0]
+        elif all_gen_files:
+            targeted_path = all_gen_files[0]
+        elif "profile" in sdata:
+            print_info(f"'{target_label}' için AI Hedefli Wordlist otomatik üretiliyor...")
+            from ai.schemas import TargetProfile
+            from core.ranking_engine import RankingEngine
+            prof_obj = TargetProfile(**sdata["profile"])
+            r_engine = RankingEngine(prof_obj)
+            auto_target_path, _ = r_engine.build_targeted_wordlist()
+            targeted_path = auto_target_path
+
+    # Hibrit liste tespiti
     hybrid_files = sorted(generated_dir.glob("hybrid_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
-
-    if not targeted_files and "profile" in sdata:
-        print_info(f"'{target_label}' için AI Hedefli Wordlist otomatik üretiliyor...")
-        from ai.schemas import TargetProfile
-        from core.ranking_engine import RankingEngine
-        prof_obj = TargetProfile(**sdata["profile"])
-        r_engine = RankingEngine(prof_obj)
-        auto_target_path, _ = r_engine.build_targeted_wordlist()
-        targeted_files = [auto_target_path]
-
-    if not hybrid_files and targeted_files and "profile" in sdata:
+    if hybrid_files:
+        hybrid_path = hybrid_files[0]
+    elif targeted_path and "profile" in sdata:
         print_info("Hibrit Wordlist otomatik birleştiriliyor...")
         from ai.schemas import TargetProfile
         from core.ranking_engine import RankingEngine
         h_engine = RankingEngine(TargetProfile(**sdata["profile"]))
         auto_hybrid_path, _ = h_engine.build_hybrid_wordlist()
-        hybrid_files = [auto_hybrid_path]
+        hybrid_path = auto_hybrid_path
 
-    targeted_path = targeted_files[0] if targeted_files else default_path
-    hybrid_path = hybrid_files[0] if hybrid_files else default_path
+    targeted_path = targeted_path or default_path
+    hybrid_path = hybrid_path or default_path
 
     print(f"\n{Fore.LIGHTBLACK_EX}--- Kıyaslanacak Wordlist'ler ---")
     print(f" 1. Varsayılan: {default_path.name}")
