@@ -16,7 +16,7 @@ class WordlistConfig(BaseModel):
     max_length: int = Field(default=32, ge=1, le=256, description="Maksimum parola uzunluğu")
     max_candidates: int = Field(default=500_000, ge=100, le=10_000_000, description="Maksimum aday sayısı limiti")
     deduplicate: bool = Field(default=True, description="Mükerrer adayları filtrele")
-    case_sensitive_dedup: bool = Field(default=False, description="Tekilleştirme büyük/küçük harf duyarlı mı?")
+    case_sensitive_dedup: bool = Field(default=True, description="Tekilleştirme büyük/küçük harf duyarlı mı?")
 
     @field_validator("max_length")
     @classmethod

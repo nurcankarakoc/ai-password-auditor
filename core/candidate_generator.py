@@ -413,10 +413,17 @@ class CandidateGenerator:
                     for delim in ['', '_', '.', '-']:
                         yield from self._yield_unique(f"{c1}{delim}{c2}")
 
-                    # c1 + c2 + Temel İnsan Ekleri
-                    for h_suf in ['123', '!', '1', '123!', '2024', '2025']:
+                    # c1 + c2 + Temel İnsan Ekleri & Ayraçlar (Cerendeniz_1, Cerendeniz1!, Denizceren34. vb.)
+                    for h_suf in HUMAN_TOP_SUFFIXES:
                         yield from self._yield_unique(f"{c1}{c2}{h_suf}")
                         yield from self._yield_unique(f"{c1}_{c2}_{h_suf}")
+                        yield from self._yield_unique(f"{c1}{c2}_{h_suf}")
+                        yield from self._yield_unique(f"{c1}{c2}.{h_suf}")
+                        if not any(c in h_suf for c in '!@#$%^&*()_+-=[]{}|;:,.<>?'):
+                            for sp in TOP_SPECIALS:
+                                yield from self._yield_unique(f"{c1}{c2}{h_suf}{sp}")
+                                yield from self._yield_unique(f"{c1}_{c2}_{h_suf}{sp}")
+                                yield from self._yield_unique(f"{c1}{c2}_{h_suf}{sp}")
 
                     # c1 + c2 + Tarih varyasyonları
                     for date in self.dates:
