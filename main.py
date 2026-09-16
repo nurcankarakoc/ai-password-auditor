@@ -69,7 +69,7 @@ def handle_default_wordlist_operations() -> None:
         print(f"{Fore.YELLOW}{Style.BRIGHT}--- [A] GENEL / VARSAYILAN SÖZLÜK (Default Wordlist) ---{Style.RESET_ALL}")
         print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Varsayılan Liste Durumu & İstatistikleri ({default_file.name})")
         print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Varsayılan Listeyi Görüntüle (Baştan / Sondan / Aralık / Tümü)")
-        print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Varsayılan Listeyi Filtrele & Temizle\n")
+        print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Wordlist Filtrele & Temizle (Kaynak Seçerek)\n")
 
         print(f"{Fore.YELLOW}{Style.BRIGHT}--- [B] KİŞİYE ÖZEL AI LİSTELERİ (Targeted & Hybrid Wordlists) ---{Style.RESET_ALL}")
         print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Üretilen Kişiye Özel Listeleri İncele (wordlists/generated/)")
@@ -166,8 +166,21 @@ def handle_default_wordlist_operations() -> None:
 
         elif sub_choice == "3":
             try:
-                print_header("VARSAYILAN WORDLIST FİLTRELEME SİHİRBAZI")
+                print_header("WORDLIST FİLTRELEME SİHİRBAZI")
                 print(f"{Fore.LIGHTBLACK_EX}Hedef sistemin parola güvenlik politikasına uygun optimize liste üretin.{Style.RESET_ALL}\n")
+
+                # 0. Kaynak wordlist seçimi
+                source_options = [default_file] + sorted(
+                    wordlist_manager.generated_dir.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True
+                )
+                print(f"{Fore.CYAN}0. Filtrelenecek Kaynak Wordlist Seçiniz:{Style.RESET_ALL}")
+                for i, sf in enumerate(source_options, 1):
+                    size_kb = round(sf.stat().st_size / 1024, 2)
+                    label = "Varsayılan Liste" if sf == default_file else "Üretilmiş Liste"
+                    print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {sf.name} ({label}, {size_kb} KB)")
+                src_in = input(f"{Fore.GREEN}Seçiminiz [1-{len(source_options)}, ENTER=1]: {Style.RESET_ALL}").strip()
+                src_idx = int(src_in) - 1 if src_in.isdigit() and 1 <= int(src_in) <= len(source_options) else 0
+                source_file = source_options[src_idx]
 
                 # 1. Min uzunluk
                 default_min = settings.wordlist.min_length
@@ -202,7 +215,7 @@ def handle_default_wordlist_operations() -> None:
                 case_sens = True if case_in in ('e', 'evet', 'y', 'yes') else False
 
                 # 5. Dosya adı
-                default_out_name = f"cleaned_min{min_val}_max{max_val}.txt"
+                default_out_name = f"{source_file.stem}_cleaned_min{min_val}_max{max_val}.txt"
                 custom_cl = input(f"\n{Fore.CYAN}5. Kaydedilecek Dosya Adı [ENTER = {default_out_name}]: {Style.RESET_ALL}").strip()
                 out_name = custom_cl if custom_cl else default_out_name
                 if not out_name.lower().endswith(".txt"):
@@ -212,7 +225,7 @@ def handle_default_wordlist_operations() -> None:
                 print_info(f"Filtreleme başlatılıyor (Min: {min_val}, Max: {max_val}, Kural: {char_rule})...")
                 
                 meta = wordlist_manager.process_and_save(
-                    source_path=default_file,
+                    source_path=source_file,
                     output_path=output_file,
                     min_length=min_val,
                     max_length=max_val,
