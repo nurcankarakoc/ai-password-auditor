@@ -8,7 +8,7 @@ import re
 import json
 import hashlib
 from pathlib import Path
-from typing import NoReturn, Optional, List, Dict, Any
+from typing import NoReturn, Optional, List, Dict, Any, Tuple
 from colorama import Fore, Style
 
 from config.settings import settings, BASE_DIR
@@ -68,7 +68,7 @@ def handle_default_wordlist_operations() -> None:
 
         print(f"{Fore.YELLOW}{Style.BRIGHT}--- [A] GENEL / VARSAYILAN SÖZLÜK (Default Wordlist) ---{Style.RESET_ALL}")
         print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Varsayılan Liste Durumu & İstatistikleri ({default_file.name})")
-        print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Varsayılan Listeden İlk 20 Parola Örneğini Görüntüle")
+        print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Varsayılan Listeyi Görüntüle (Baştan / Sondan / Aralık / Tümü)")
         print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Varsayılan Listeyi Filtrele & Temizle\n")
 
         print(f"{Fore.YELLOW}{Style.BRIGHT}--- [B] KİŞİYE ÖZEL AI LİSTELERİ (Targeted & Hybrid Wordlists) ---{Style.RESET_ALL}")
@@ -97,13 +97,69 @@ def handle_default_wordlist_operations() -> None:
 
         elif sub_choice == "2":
             try:
-                print_header("VARSAYILAN LİSTE - İLK 20 PAROLA ÖRNEĞİ")
-                count = 0
-                for pwd in wordlist_manager.stream_lines(default_file):
-                    count += 1
-                    print(f" {Fore.LIGHTBLUE_EX}{count:02d}.{Style.RESET_ALL} {pwd}")
-                    if count >= 20:
-                        break
+                stats = wordlist_manager.get_wordlist_stats(default_file)
+                total_lines = stats["total_lines"]
+
+                print_header("VARSAYILAN LİSTE GÖRÜNTÜLEME")
+                print(f"{Fore.LIGHTBLACK_EX}Dosyada toplam {total_lines:,} parola bulunuyor.{Style.RESET_ALL}\n")
+                print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Baştan N Adet")
+                print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Sondan N Adet")
+                print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Belirli Aralık (örn: 100-150)")
+                print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Tümünü Listele")
+                print(f" {Fore.YELLOW}[0]{Style.RESET_ALL} Vazgeç / İptal")
+
+                view_choice = input(f"\n{Fore.GREEN}Seçiminiz [0-4]: {Style.RESET_ALL}").strip()
+
+                results: List[Tuple[int, str]] = []
+
+                if view_choice == "1":
+                    n_in = input(f"{Fore.CYAN}Kaç adet gösterilsin? [ENTER = 20]: {Style.RESET_ALL}").strip()
+                    n = int(n_in) if n_in.isdigit() and int(n_in) > 0 else 20
+                    results = wordlist_manager.get_head(default_file, n=n)
+
+                elif view_choice == "2":
+                    n_in = input(f"{Fore.CYAN}Kaç adet gösterilsin? [ENTER = 20]: {Style.RESET_ALL}").strip()
+                    n = int(n_in) if n_in.isdigit() and int(n_in) > 0 else 20
+                    results = wordlist_manager.get_tail(default_file, n=n)
+
+                elif view_choice == "3":
+                    range_in = input(f"{Fore.CYAN}Aralık girin (örn: 100-150): {Style.RESET_ALL}").strip()
+                    try:
+                        start_s, end_s = range_in.split("-", 1)
+                        start_n, end_n = int(start_s.strip()), int(end_s.strip())
+                        if start_n < 1 or end_n < start_n:
+                            raise ValueError
+                        results = wordlist_manager.get_range(default_file, start=start_n, end=end_n)
+                    except ValueError:
+                        print_error("Geçersiz aralık formatı! Örnek: 100-150")
+                        pause_prompt()
+                        continue
+
+                elif view_choice == "4":
+                    if total_lines > 2000:
+                        confirm = input(
+                            f"{Fore.RED}DİKKAT: Liste {total_lines:,} satır içeriyor, terminalde tümünü göstermek uzun sürebilir. "
+                            f"Devam edilsin mi? [E/h]: {Style.RESET_ALL}"
+                        ).strip().lower()
+                        if confirm not in ('e', 'evet', 'y', 'yes'):
+                            print_info("İşlem kullanıcı tarafından iptal edildi.")
+                            pause_prompt()
+                            continue
+                    results = wordlist_manager.get_range(default_file, start=1, end=None)
+
+                elif view_choice == "0":
+                    continue
+                else:
+                    print_error("Geçersiz seçim!")
+                    pause_prompt()
+                    continue
+
+                if not results:
+                    print_warning("Gösterilecek satır bulunamadı.")
+                else:
+                    print_header(f"SONUÇLAR ({len(results):,} satır)")
+                    for idx, pwd in results:
+                        print(f" {Fore.LIGHTBLUE_EX}{idx:06d}.{Style.RESET_ALL} {pwd}")
             except Exception as e:
                 print_error(f"Parola listesi okunurken hata: {e}")
             pause_prompt()
