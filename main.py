@@ -194,11 +194,12 @@ def handle_default_wordlist_operations() -> None:
 
                 # 3. Karakter kuralı
                 print(f"\n{Fore.CYAN}3. Parola Karakter Kuralı Seçiniz:{Style.RESET_ALL}")
-                print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Tüm Parolalar (Karakter kısıtlaması yok)")
-                print(f" {Fore.CYAN}[2]{Style.RESET_ALL} En az 1 Rakam içermek zorunda (örn: pass123)")
-                print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Hem Harf hem Rakam içermek zorunda (Alfanümerik)")
-                print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sadece Rakamlardan oluşsun (PIN / Sayısal şifreler)")
-                print(f" {Fore.CYAN}[5]{Style.RESET_ALL} En az 1 Özel Karakter içermek zorunda (örn: pass!, pass_1)")
+                print(f"{Fore.LIGHTBLACK_EX}   Listede sadece seçtiğiniz kurala UYAN parolalar kalır, diğerleri elenir.{Style.RESET_ALL}")
+                print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Tüm Parolalar — hiçbir karakter kısıtlaması uygulanmaz, liste olduğu gibi kalır")
+                print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Rakam İçerenler — en az 1 rakam şart  {Fore.GREEN}(kalır: pass123){Style.RESET_ALL} {Fore.RED}(elenir: password){Style.RESET_ALL}")
+                print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Harf + Rakam (Alfanümerik) — hem harf hem rakam şart  {Fore.GREEN}(kalır: admin2024){Style.RESET_ALL} {Fore.RED}(elenir: admin, 123456){Style.RESET_ALL}")
+                print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sadece Rakam (PIN) — parola baştan sona rakam olmalı  {Fore.GREEN}(kalır: 123456){Style.RESET_ALL} {Fore.RED}(elenir: pass123){Style.RESET_ALL}")
+                print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Özel Karakter İçerenler — en az 1 özel karakter (!, @, _, . vb.) şart  {Fore.GREEN}(kalır: pass!123){Style.RESET_ALL} {Fore.RED}(elenir: pass123){Style.RESET_ALL}")
                 rule_in = input(f"{Fore.GREEN}Seçiminiz [1-5, ENTER=1]: {Style.RESET_ALL}").strip()
 
                 rule_map = {
