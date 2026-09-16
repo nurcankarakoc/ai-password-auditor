@@ -260,6 +260,17 @@ class WordlistManager:
             dq.append((idx, line))
         return list(dq)
 
+    def get_range(self, file_path: Path, start: int = 1, end: Optional[int] = None) -> List[Tuple[int, str]]:
+        """Dosyanın start..end satır aralığını (1-indexed, dahil) satır numarasıyla döndürür. end=None ise dosya sonuna kadar okur."""
+        lines = []
+        for idx, line in enumerate(self.stream_lines(file_path), start=1):
+            if idx < start:
+                continue
+            if end is not None and idx > end:
+                break
+            lines.append((idx, line))
+        return lines
+
     def search_lines(self, file_path: Path, query: str, max_results: int = 50) -> List[Tuple[int, str]]:
         """Belirtilen sorguyu içeren satırları arar."""
         q_lower = query.lower()
