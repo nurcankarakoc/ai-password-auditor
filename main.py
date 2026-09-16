@@ -51,9 +51,8 @@ def display_menu() -> None:
     print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yapay Zeka Hedefli Liste Üretimi (AI Targeted Wordlist)")
     print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)")
     print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Yerel Hash Denetim Motoru (Local Hash Audit Engine)")
-    print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Güvenlik Denetleyicisi Testi (Safety Controller & Mock Audit)")
-    print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Kıyaslama ve Performans Analizi (Benchmark Module)")
-    print(f" {Fore.CYAN}[7]{Style.RESET_ALL} Çıkış (Exit)\n")
+    print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Kıyaslama ve Performans Analizi (Benchmark Module)")
+    print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Çıkış (Exit)\n")
     print(f"{Fore.LIGHTBLACK_EX} ⚡ Siber Komutlar: 'targets', 'use <hedef>', 'view 10', 'info', 'search <kelime>', 'help'{Style.RESET_ALL}\n")
 
 
@@ -1105,7 +1104,7 @@ def main() -> None:
             display_menu()
 
             active_target = get_active_target()
-            prompt_label = f"cybzenor ({Fore.CYAN}{active_target}{Fore.GREEN}) > " if active_target else "cybzenor [1-7 veya komut]: "
+            prompt_label = f"cybzenor ({Fore.CYAN}{active_target}{Fore.GREEN}) > " if active_target else "cybzenor [1-6 veya komut]: "
             choice = input(f"{Fore.GREEN}{Style.BRIGHT}{prompt_label}{Style.RESET_ALL}").strip()
 
             if not choice:
@@ -1124,13 +1123,11 @@ def main() -> None:
             elif choice == "4":
                 handle_local_hash_audit_engine()
             elif choice == "5":
-                handle_safety_controller_audit()
-            elif choice == "6":
                 handle_benchmark_module()
-            elif choice == "7":
+            elif choice == "6":
                 exit_application()
             else:
-                print_error("Geçersiz seçim! Lütfen 1 ile 7 arasında bir rakam girin veya bir komut yazın (örn: 'view 10', 'list').")
+                print_error("Geçersiz seçim! Lütfen 1 ile 6 arasında bir rakam girin veya bir komut yazın (örn: 'view 10', 'list').")
                 pause_prompt()
 
         except KeyboardInterrupt:

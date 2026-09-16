@@ -18,7 +18,6 @@
    - [Senaryo 1: Hedefe Özel Wordlist Üretmek](#senaryo-1-hedefe-özel-wordlist-üretmek-menü-2)
    - [Senaryo 2: Üretilen Şifreleri Hızlıca İncelemek](#senaryo-2-üretilen-şifreleri-hızlıca-incelemek-tek-satır-komutlar)
    - [Senaryo 3: Yerel Parola Güvenlik Denetimi (Hash Audit Engine)](#senaryo-3-yerel-parola-güvenlik-denetimi-hash-audit-engine-menü-4)
-   - [Senaryo 4: Güvenlik Sigortası Simülasyonu (Safety Controller)](#senaryo-4-güvenlik-sigortası-simülasyonu-safety-controller-menü-5)
 3. [Neden Düz Metin Şifre Yerine Hash Denetliyoruz?](#-neden-düz-metin-şifre-yerine-hash-denetliyoruz)
 4. [Sık Karşılaşılan Sorular ve Çözümler (SSS)](#-sık-karşılaşılan-sorular-ve-çözümler-sss)
 5. [Testleri Çalıştırma](#-testleri-çalıştırma)
@@ -88,9 +87,8 @@ Ekrana Cybzenor ana operasyon menüsü gelecektir:
   [2] Yapay Zeka Hedefli Liste Üretimi (AI Targeted Wordlist)
   [3] Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)
   [4] Yerel Hash Denetim Motoru (Local Hash Audit Engine)
-  [5] Güvenlik Denetleyicisi Testi (Safety Controller & Mock Audit)
-  [6] Kıyaslama ve Performans Analizi (Benchmark Module)
-  [7] Çıkış (Exit)
+  [5] Kıyaslama ve Performans Analizi (Benchmark Module)
+  [6] Çıkış (Exit)
 ```
 
 ---
@@ -157,16 +155,6 @@ Elinizde bir kullanıcının veya sistemin parola özeti (SHA-256 Hash'i) olduğ
  • Geçen Süre        : 0.0008 saniye
  • Ortalama Hız      : 1,320,400 hash/sn
 ```
-
----
-
-### Senaryo 4: Güvenlik Sigortası Simülasyonu (Safety Controller) (Menü [5])
-
-Etik penetrasyon testlerinde en büyük kural şudur: **Hedef sistemi kilitleme, servisi çökertme.**  
-Cybzenor, arkasındaki güvenlik denetleyicisi ile hedef sistemden anormal bir yanıt geldiğinde testi anında güvenle durdurur:
-- **Senaryo A (HTTP 429 Too Many Requests):** Hız sınırı (Rate-limit) tespit edildiğinde durma.
-- **Senaryo B (HTTP 423 Account Lockout):** Hesap kilitlenme uyarısında kullanıcıyı mağdur etmemek için testi durdurma.
-- **Senaryo C (CAPTCHA Detection):** Bot koruması tetiklendiğinde durma.
 
 ---
 
