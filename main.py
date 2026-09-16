@@ -621,22 +621,40 @@ def handle_targeted_wordlist_generation() -> None:
 
 
 def handle_hybrid_wordlist_generation() -> None:
-    """[3] Hybrid Wordlist Generation operasyonu."""
+    """[3] Hybrid Wordlist Generation operasyonu: mevcut wordlist dosyalarını seçip birleştirir."""
     clear_screen()
     print_banner(version=settings.version)
     print_header("[3] HİBRİT WORDLIST BİRLEŞTİRİCİ (Hybrid Wordlist Generation)")
+    print(f"{Fore.LIGHTBLACK_EX}Var olan wordlist dosyalarından 2 veya daha fazlasını seçip tek bir listede birleştirin.{Style.RESET_ALL}\n")
 
-    profile = collect_target_profile_interactively()
-    if not profile or profile.is_empty():
-        print_warning("Hedef profil oluşturulamadı veya işlem iptal edildi.")
+    source_options = [wordlist_manager.default_wordlist_path] + sorted(
+        wordlist_manager.generated_dir.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    if len(source_options) < 2:
+        print_warning("Birleştirmek için en az 2 wordlist gerekiyor. Önce Menü [1] veya [2] ile ek liste üretiniz.")
         pause_prompt()
         return
 
-    # Hedef sistem parola politikasını al (İsteğe bağlı)
-    policy = collect_password_policy_interactively()
+    for i, sf in enumerate(source_options, 1):
+        size_kb = round(sf.stat().st_size / 1024, 2)
+        label = "Varsayılan Liste" if sf == wordlist_manager.default_wordlist_path else "Üretilmiş Liste"
+        print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {sf.name} ({label}, {size_kb} KB)")
 
-    target_slug = profile.names[0].lower() if profile.names else "target"
-    default_filename = f"hybrid_{target_slug}.txt"
+    sel_in = input(f"\n{Fore.GREEN}Birleştirilecek dosyaların numaralarını girin (örn: 1,3,4): {Style.RESET_ALL}").strip()
+    try:
+        indices = sorted(set(int(x.strip()) for x in sel_in.split(",") if x.strip()))
+        if len(indices) < 2 or any(i < 1 or i > len(source_options) for i in indices):
+            raise ValueError
+        chosen_sources = [source_options[i - 1] for i in indices]
+    except ValueError:
+        print_error("Geçersiz seçim! En az 2 geçerli dosya numarası virgülle ayırarak giriniz (örn: 1,2).")
+        pause_prompt()
+        return
+
+    case_in = input(f"\n{Fore.CYAN}Büyük/Küçük harf farkı korunsun mu? (Örn: 'Admin' ile 'admin' ayrı tutulsun) [e/H]: {Style.RESET_ALL}").strip().lower()
+    case_sens = case_in in ('e', 'evet', 'y', 'yes')
+
+    default_filename = "hybrid_" + "_".join(p.stem for p in chosen_sources)[:60] + ".txt"
 
     print_header("KAYIT VE DOSYA ADI YAPILANDIRMASI")
     print(f"{Fore.LIGHTBLACK_EX}Üretilen hibrit liste 'wordlists/generated/' dizinine kaydedilecektir.{Style.RESET_ALL}")
@@ -645,33 +663,28 @@ def handle_hybrid_wordlist_generation() -> None:
         chosen_filename = custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
     else:
         chosen_filename = default_filename
-
-    confirm = input(f"\n{Fore.YELLOW}'{chosen_filename}' adıyla hibrit wordlist üretilsin mi? [E/h]: {Style.RESET_ALL}").strip().lower()
-    if confirm in ('h', 'hayir', 'n', 'no'):
-        print_info("İşlem kullanıcı tarafından iptal edildi.")
-        pause_prompt()
-        return
+    output_file = wordlist_manager.generated_dir / chosen_filename
 
     try:
-        print_info("AI hedefe yönelik liste üretiliyor ve genel listeyle birleştiriliyor...")
-        engine = RankingEngine(profile, policy=policy)
-        output_file, meta = engine.build_hybrid_wordlist(output_filename=chosen_filename)
+        print_info(f"{len(chosen_sources)} dosya birleştiriliyor ve tekilleştiriliyor...")
+        meta = wordlist_manager.merge_wordlists(
+            source_paths=chosen_sources,
+            output_path=output_file,
+            case_sensitive=case_sens
+        )
 
-        print_success("Hibrit Wordlist Başarıyla Üretildi ve Kaydedildi!")
+        print_success("Hibrit Wordlist Başarıyla Birleştirildi ve Kaydedildi!")
         print(f" • Dosya Adı        : {Fore.GREEN}{Style.BRIGHT}{output_file.name}{Style.RESET_ALL}")
         print(f" • Tam Dosya Yolu   : {output_file}")
-        print(f" • Parola Politikası: {meta.get('password_policy', 'Varsayılan')}")
-        print(f" • Toplam Aday      : {meta['total_candidates']:,}")
-        print(f" • AI Hedefli Aday  : {meta['targeted_candidates']:,}")
-        print(f" • Genel Liste Aday : {meta['default_candidates']:,}")
-        print(f" • Geçen Süre       : {meta['duration_seconds']} sn")
+        print(f" • Kaynak Dosyalar  : {', '.join(meta['source_files'])}")
+        print(f" • Toplam Kaynak Satır : {meta['total_source_lines']:,}")
+        print(f" • Kaydedilen Benzersiz: {meta['unique_written_lines']:,}")
+        print(f" • Elenen/Mükerrer     : {meta['filtered_or_duplicate_lines']:,}")
         print(f" • Metadata         : {output_file.name}.metadata.json")
 
-        save_target_profile_to_disk(profile)
-
     except Exception as e:
-        logger.exception(f"Hibrit liste üretim hatası: {e}")
-        print_error(f"Üretim sırasında hata: {e}")
+        logger.exception(f"Hibrit liste birleştirme hatası: {e}")
+        print_error(f"Birleştirme sırasında hata: {e}")
 
     pause_prompt()
 
