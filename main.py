@@ -611,9 +611,7 @@ def handle_targeted_wordlist_generation() -> None:
         print(f" • Geçen Süre       : {meta['duration_seconds']} sn")
         print(f" • Metadata         : {output_file.name}.metadata.json")
 
-        save_prof = input(f"\n{Fore.YELLOW}Bu hedef profilini kalıcı hedefler (Benchmark/Denetim) arasına kaydetmek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
-        if save_prof not in ('h', 'hayir', 'n', 'no'):
-            save_target_profile_to_disk(profile)
+        save_target_profile_to_disk(profile)
 
     except Exception as e:
         logger.exception(f"Hedefli wordlist üretim hatası: {e}")
@@ -669,9 +667,7 @@ def handle_hybrid_wordlist_generation() -> None:
         print(f" • Geçen Süre       : {meta['duration_seconds']} sn")
         print(f" • Metadata         : {output_file.name}.metadata.json")
 
-        save_prof = input(f"\n{Fore.YELLOW}Bu hedef profilini kalıcı hedefler (Benchmark/Denetim) arasına kaydetmek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
-        if save_prof not in ('h', 'hayir', 'n', 'no'):
-            save_target_profile_to_disk(profile)
+        save_target_profile_to_disk(profile)
 
     except Exception as e:
         logger.exception(f"Hibrit liste üretim hatası: {e}")
