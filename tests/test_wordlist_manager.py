@@ -65,6 +65,34 @@ class TestWordlistFilteringAndDedup:
         assert len(filtered) == 3
         assert set(filtered) == {"Admin123", "admin123", "ADMIN123"}
 
+    def test_char_rule_filtering(self):
+        """Karakter kurallarına göre (digit, alphanumeric, numeric_only, special) filtreleme testi."""
+        candidates = ["password", "pass123", "12345678", "Pass!Word", "P@ss1234"]
+
+        # 1. En az 1 rakam
+        digits = list(WordlistManager.filter_and_deduplicate(candidates, char_rule="digit"))
+        assert "password" not in digits
+        assert "Pass!Word" not in digits
+        assert "pass123" in digits
+        assert "12345678" in digits
+
+        # 2. Alfanümerik (hem harf hem rakam)
+        alphanum = list(WordlistManager.filter_and_deduplicate(candidates, char_rule="alphanumeric"))
+        assert "12345678" not in alphanum
+        assert "password" not in alphanum
+        assert "pass123" in alphanum
+
+        # 3. Sadece rakamlar (PIN)
+        numeric = list(WordlistManager.filter_and_deduplicate(candidates, char_rule="numeric_only"))
+        assert numeric == ["12345678"]
+
+        # 4. En az 1 özel karakter
+        special = list(WordlistManager.filter_and_deduplicate(candidates, char_rule="special"))
+        assert "Pass!Word" in special
+        assert "P@ss1234" in special
+        assert "password" not in special
+
+
 
 class TestWordlistProcessAndMetadata:
     """Dosya işleme ve metadata oluşturma testleri."""

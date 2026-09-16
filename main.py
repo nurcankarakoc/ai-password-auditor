@@ -110,25 +110,65 @@ def handle_default_wordlist_operations() -> None:
 
         elif sub_choice == "3":
             try:
-                custom_cl = input(f"{Fore.CYAN}Temizlenmiş liste dosya adı [ENTER = default_cleaned.txt]: {Style.RESET_ALL}").strip()
-                out_name = custom_cl if custom_cl else "default_cleaned.txt"
+                print_header("VARSAYILAN WORDLIST FİLTRELEME SİHİRBAZI")
+                print(f"{Fore.LIGHTBLACK_EX}Hedef sistemin parola güvenlik politikasına uygun optimize liste üretin.{Style.RESET_ALL}\n")
+
+                # 1. Min uzunluk
+                default_min = settings.wordlist.min_length
+                min_in = input(f"{Fore.CYAN}1. Minimum Parola Uzunluğu [ENTER = {default_min}]: {Style.RESET_ALL}").strip()
+                min_val = int(min_in) if min_in.isdigit() and int(min_in) > 0 else default_min
+
+                # 2. Max uzunluk
+                default_max = settings.wordlist.max_length
+                max_in = input(f"{Fore.CYAN}2. Maksimum Parola Uzunluğu [ENTER = {default_max}]: {Style.RESET_ALL}").strip()
+                max_val = int(max_in) if max_in.isdigit() and int(max_in) >= min_val else default_max
+
+                # 3. Karakter kuralı
+                print(f"\n{Fore.CYAN}3. Parola Karakter Kuralı Seçiniz:{Style.RESET_ALL}")
+                print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Tüm Parolalar (Karakter kısıtlaması yok)")
+                print(f" {Fore.CYAN}[2]{Style.RESET_ALL} En az 1 Rakam içermek zorunda (örn: pass123)")
+                print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Hem Harf hem Rakam içermek zorunda (Alfanümerik)")
+                print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sadece Rakamlardan oluşsun (PIN / Sayısal şifreler)")
+                print(f" {Fore.CYAN}[5]{Style.RESET_ALL} En az 1 Özel Karakter içermek zorunda (örn: pass!, pass_1)")
+                rule_in = input(f"{Fore.GREEN}Seçiminiz [1-5, ENTER=1]: {Style.RESET_ALL}").strip()
+
+                rule_map = {
+                    "1": "all",
+                    "2": "digit",
+                    "3": "alphanumeric",
+                    "4": "numeric_only",
+                    "5": "special"
+                }
+                char_rule = rule_map.get(rule_in, "all")
+
+                # 4. Büyük / Küçük harf tekilleştirme
+                case_in = input(f"\n{Fore.CYAN}4. Büyük/Küçük harf farkı korunsun mu? (Örn: 'Admin' ile 'admin' ayrı tutulsun) [E/h]: {Style.RESET_ALL}").strip().lower()
+                case_sens = True if case_in in ('e', 'evet', 'y', 'yes') else False
+
+                # 5. Dosya adı
+                default_out_name = f"cleaned_min{min_val}_max{max_val}.txt"
+                custom_cl = input(f"\n{Fore.CYAN}5. Kaydedilecek Dosya Adı [ENTER = {default_out_name}]: {Style.RESET_ALL}").strip()
+                out_name = custom_cl if custom_cl else default_out_name
                 if not out_name.lower().endswith(".txt"):
                     out_name += ".txt"
                 output_file = wordlist_manager.generated_dir / out_name
-                print_info(f"Filtreleme başlatılıyor (Min: {settings.wordlist.min_length}, Max: {settings.wordlist.max_length})...")
+
+                print_info(f"Filtreleme başlatılıyor (Min: {min_val}, Max: {max_val}, Kural: {char_rule})...")
                 
                 meta = wordlist_manager.process_and_save(
                     source_path=default_file,
                     output_path=output_file,
-                    min_length=settings.wordlist.min_length,
-                    max_length=settings.wordlist.max_length,
-                    case_sensitive=settings.wordlist.case_sensitive_dedup
+                    min_length=min_val,
+                    max_length=max_val,
+                    case_sensitive=case_sens,
+                    char_rule=char_rule
                 )
                 
                 print_success(f"Filtreleme ve tekilleştirme tamamlandı! Dosya: {output_file.name}")
                 print(f" • Kaynak Satır     : {meta['total_source_lines']:,}")
                 print(f" • Kaydedilen Satır : {meta['unique_written_lines']:,}")
                 print(f" • Elenen/Mükerrer  : {meta['filtered_or_duplicate_lines']:,}")
+                print(f" • Karakter Kuralı  : {char_rule}")
                 print(f" • Çıktı Dosyası    : {output_file.name}")
                 print(f" • Metadata Kaydı   : {output_file.name}.metadata.json")
             except Exception as e:

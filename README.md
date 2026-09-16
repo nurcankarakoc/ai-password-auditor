@@ -3,7 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux | Windows | macOS](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-teal.svg)]()
-[![Tests: 66/66 Passed](https://img.shields.io/badge/tests-66%2F66%20passed-brightgreen.svg)]()
+[![Tests: 67/67 Passed](https://img.shields.io/badge/tests-67%2F67%20passed-brightgreen.svg)]()
 
 > **Yeni Başlayanlar İçin Özet:**  
 > Klasik parola kırma araçları, içinde milyonlarca rastgele yabancı kelime olan devasa dosyalar (örn: `rockyou.txt`) kullanarak saatlerce boşuna bekletir.  

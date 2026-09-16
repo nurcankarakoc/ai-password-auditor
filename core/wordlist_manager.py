@@ -47,11 +47,17 @@ class WordlistManager:
         candidates: Iterable[str],
         min_length: int = 6,
         max_length: int = 32,
-        case_sensitive: bool = False
+        case_sensitive: bool = False,
+        char_rule: str = "all"
     ) -> Generator[str, None, None]:
         """
-        Verilen aday akışını uzunluk kriterlerine göre filtreler ve mükerrer kayıtları tekilleştirir.
-        Generator (streaming) olarak sonuç döner.
+        Verilen aday akışını uzunluk kriterlerine ve karakter kurallarına göre filtreler ve mükerrer kayıtları tekilleştirir.
+        char_rule:
+          - "all": Tüm karakter kombinasyonları
+          - "digit": En az 1 rakam içermeli
+          - "alphanumeric": En az 1 harf ve 1 rakam içermeli
+          - "numeric_only": Sadece rakamlardan oluşmalı (PIN/Sayısal)
+          - "special": En az 1 özel karakter içermeli
         """
         seen: Set[str] = set()
 
@@ -60,7 +66,23 @@ class WordlistManager:
             if not (min_length <= len(candidate) <= max_length):
                 continue
 
-            # 2. Tekilleştirme kontrolü
+            # 2. Karakter kuralları
+            if char_rule == "digit":
+                if not any(c.isdigit() for c in candidate):
+                    continue
+            elif char_rule == "alphanumeric":
+                has_alpha = any(c.isalpha() for c in candidate)
+                has_digit = any(c.isdigit() for c in candidate)
+                if not (has_alpha and has_digit):
+                    continue
+            elif char_rule == "numeric_only":
+                if not candidate.isdigit():
+                    continue
+            elif char_rule == "special":
+                if not any(not c.isalnum() for c in candidate):
+                    continue
+
+            # 3. Tekilleştirme kontrolü
             lookup_key = candidate if case_sensitive else candidate.lower()
             if lookup_key in seen:
                 continue
@@ -74,7 +96,8 @@ class WordlistManager:
         output_path: Path,
         min_length: Optional[int] = None,
         max_length: Optional[int] = None,
-        case_sensitive: Optional[bool] = None
+        case_sensitive: Optional[bool] = None,
+        char_rule: str = "all"
     ) -> Dict[str, Any]:
         """
         Bir kaynak dosyayı okur, filtreleyip tekilleştirerek hedef dosyaya yazar ve
@@ -85,7 +108,7 @@ class WordlistManager:
         case_sens = case_sensitive if case_sensitive is not None else settings.wordlist.case_sensitive_dedup
 
         logger.info(
-            f"Wordlist işleme başladı: Kaynak={source_path.name}, Min={min_len}, Max={max_len}, Duyarlılık={case_sens}"
+            f"Wordlist işleme başladı: Kaynak={source_path.name}, Min={min_len}, Max={max_len}, Duyarlılık={case_sens}, Kural={char_rule}"
         )
 
         total_lines = 0
@@ -104,7 +127,8 @@ class WordlistManager:
                 candidates=stream,
                 min_length=min_len,
                 max_length=max_len,
-                case_sensitive=case_sens
+                case_sensitive=case_sens,
+                char_rule=char_rule
             )
 
             for line in filtered_stream:
@@ -131,7 +155,8 @@ class WordlistManager:
             "filters": {
                 "min_length": min_len,
                 "max_length": max_len,
-                "case_sensitive_dedup": case_sens
+                "case_sensitive_dedup": case_sens,
+                "char_rule": char_rule
             }
         }
 
