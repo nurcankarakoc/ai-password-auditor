@@ -172,6 +172,71 @@ class WordlistManager:
 
         return metadata
 
+    def merge_wordlists(
+        self,
+        source_paths: List[Path],
+        output_path: Path,
+        case_sensitive: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Birden fazla wordlist dosyasını sırayla okuyup tekilleştirerek tek bir dosyada birleştirir
+        ve yanında bir .metadata.json dosyası oluşturur. Uzunluk/karakter filtresi uygulanmaz.
+        """
+        case_sens = case_sensitive if case_sensitive is not None else settings.wordlist.case_sensitive_dedup
+
+        logger.info(f"Wordlist birleştirme başladı: Kaynaklar={[p.name for p in source_paths]}, Duyarlılık={case_sens}")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        start_time = datetime.now(timezone.utc)
+
+        seen: Set[str] = set()
+        total_source_lines = 0
+        written_lines = 0
+        per_source_counts: Dict[str, int] = {}
+
+        with open(output_path, "w", encoding="utf-8") as out_file:
+            for src in source_paths:
+                src_count = 0
+                for line in self.stream_lines(src):
+                    total_source_lines += 1
+                    src_count += 1
+                    lookup_key = line if case_sens else line.lower()
+                    if lookup_key in seen:
+                        continue
+                    seen.add(lookup_key)
+                    out_file.write(line + "\n")
+                    written_lines += 1
+                per_source_counts[src.name] = src_count
+
+        filtered_out = total_source_lines - written_lines
+        file_size_bytes = output_path.stat().st_size if output_path.exists() else 0
+        end_time = datetime.now(timezone.utc)
+
+        metadata: Dict[str, Any] = {
+            "source_files": [p.name for p in source_paths],
+            "source_line_counts": per_source_counts,
+            "output_file": output_path.name,
+            "created_at": end_time.isoformat(),
+            "duration_seconds": round((end_time - start_time).total_seconds(), 4),
+            "total_source_lines": total_source_lines,
+            "unique_written_lines": written_lines,
+            "filtered_or_duplicate_lines": filtered_out,
+            "file_size_bytes": file_size_bytes,
+            "case_sensitive_dedup": case_sens,
+            "type": "MERGED"
+        }
+
+        metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
+        with open(metadata_path, "w", encoding="utf-8") as meta_file:
+            json.dump(metadata, meta_file, indent=2, ensure_ascii=False)
+
+        logger.info(
+            f"Wordlist birleştirme tamamlandı: {written_lines:,} benzersiz parola kaydedildi ({filtered_out:,} mükerrer elendi). "
+            f"Metadata: {metadata_path.name}"
+        )
+
+        return metadata
+
     def get_wordlist_stats(self, file_path: Path) -> Dict[str, Any]:
         """
         Belirtilen wordlist dosyasının satır sayısı, boyutu ve varsa metadata bilgilerini döndürür.
