@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Deterministik Kural Motoru (Candidate Generator)
+Cybzenor - Deterministik Kural Motoru (Candidate Generator)
 Yapılandırılmış TargetProfile nesnesinden hafızayı (RAM) şişirmeden
 akışkan (yield/generator) ve aşamalı (Tiered) parola adayları üreten motor.
 """

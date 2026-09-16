@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 6 Local Hash Audit Engine Testleri
+Cybzenor - Adım 6 Local Hash Audit Engine Testleri
 SHA-256 hesaplama, eşleşme anında erken sonlandırma, pozisyon ve hız ölçüm testleri.
 """
 
@@ -7,7 +7,7 @@ import hashlib
 from pathlib import Path
 import pytest
 
-from core.test_engine import LocalHashAuditEngine, AuditResult
+from core.hash_audit_engine import LocalHashAuditEngine, AuditResult
 
 
 @pytest.fixture

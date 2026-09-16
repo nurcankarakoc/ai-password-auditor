@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 4 Candidate Generator Testleri
+Cybzenor - Adım 4 Candidate Generator Testleri
 Generator akışı, Leetspeak, Türkçe karakter normalizasyonu ve aşamalı üretim (Tiered) testleri.
 """
 

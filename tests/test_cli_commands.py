@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA / Cybzenor) - CLI Komut Modülü Testleri
+Cybzenor - CLI Komut Modülü Testleri
 'list', 'view', 'tail', 'search' hızlı komutlarının birim testleri.
 """
 

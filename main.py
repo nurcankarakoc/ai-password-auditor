@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Ana CLI Giriş Noktası
+Cybzenor - Ana CLI Giriş Noktası
 Kullanıcı arayüzü, interaktif menü döngüsü ve operasyonel modül yönlendiricisi.
 """
 
@@ -550,7 +550,7 @@ def handle_hybrid_wordlist_generation() -> None:
     pause_prompt()
 
 
-from core.test_engine import test_engine
+from core.hash_audit_engine import test_engine, LocalHashAuditEngine
 import json
 
 
@@ -679,7 +679,7 @@ def handle_safety_controller_audit() -> None:
     print_banner(version=settings.version)
     print_header("GÜVENLİK DENETLEYİCİSİ VE MOCK AUDIT (Safety Controller)")
     print(f"{Fore.YELLOW}{Style.BRIGHT} [!] ETİK VE GÜVENLİK İLKESİ:{Style.RESET_ALL}")
-    print(" SPA, hedef sistemlerin rate-limit veya hesap kilitleme mekanizmalarını asla aşmaya çalışmaz.")
+    print(" Cybzenor, hedef sistemlerin rate-limit veya hesap kilitleme mekanizmalarını asla aşmaya çalışmaz.")
     print(" Anormal yanıt veya engelleme sinyali tespit ettiği anda testi derhal güvenli biçimde durdurur.\n")
 
     print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Senaryo A: Rate-Limit Simülasyonu (HTTP 429 Too Many Requests)")
@@ -906,7 +906,7 @@ def handle_benchmark_module() -> None:
 def exit_application() -> NoReturn:
     """Uygulamayı güvenli ve temiz bir şekilde sonlandırır."""
     print("\n")
-    print_info("Smart Password Auditor kapatılıyor. Güvenli çalışmalar dileriz.")
+    print_info("Cybzenor kapatılıyor. Güvenli çalışmalar dileriz.")
     logger.info("Uygulama kullanıcı talebiyle normal olarak kapatıldı.")
     sys.exit(0)
 

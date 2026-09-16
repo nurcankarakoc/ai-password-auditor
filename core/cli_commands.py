@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA / Cybzenor) - Komut Satırı ve Siber Hedef Yöneticisi (Target Workspace)
+Cybzenor - Komut Satırı ve Siber Hedef Yöneticisi (Target Workspace)
 Gerçek bir siber güvenlik aracı mantığıyla hedef profilleri (dossiers), aktif hedef (use target)
 ve doğrudan komutları ('view 10', 'targets', 'use krakoç', 'info') yönetir.
 """
@@ -499,7 +499,7 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
     # 9. Çıkış
     if cmd in ["exit", "quit", "q", "cikis", "çıkış"]:
         import sys
-        print(f"\n{Fore.CYAN}Smart Password Auditor kapatılıyor. Güvenli çalışmalar dileriz.{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Cybzenor kapatılıyor. Güvenli çalışmalar dileriz.{Style.RESET_ALL}")
         sys.exit(0)
 
     # Tanınmayan komut

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Hedef Profil Veri Modelleri
+Cybzenor - Hedef Profil Veri Modelleri
 OSINT ve profil girdilerini yapılandırılmış veri şemasına (NER) dönüştürmek için Pydantic modelleri.
 """
 

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Platform ve Terminal Yardımcısı
+Cybzenor - Platform ve Terminal Yardımcısı
 Windows ve Linux/macOS sistemlerde uyumlu ekran kontrolü, renklendirme ve UTF-8 yapılandırması.
 """
 

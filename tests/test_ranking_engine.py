@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 5 Ranking Engine Testleri
+Cybzenor - Adım 5 Ranking Engine Testleri
 Skorlama kriterleri, hedefli wordlist üretimi, hibrit birleştirme ve metadata testleri.
 """
 

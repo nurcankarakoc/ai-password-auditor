@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Ayar Yönetimi Modülü
+Cybzenor - Ayar Yönetimi Modülü
 Pydantic tabanlı tip doğrulaması ve konfigürasyon yükleyici.
 """
 
@@ -48,7 +48,7 @@ class SafetyConfig(BaseModel):
 
 class AppSettings(BaseModel):
     """Uygulama ana yapılandırma modeli."""
-    app_name: str = Field(default="Smart Password Auditor")
+    app_name: str = Field(default="Cybzenor")
     version: str = Field(default="1.0.0")
     log_level: str = Field(default="INFO", description="Log seviyesi: DEBUG, INFO, WARNING, ERROR")
     mask_sensitive_data: bool = Field(default=True, description="Loglarda hassas verileri maskele")
