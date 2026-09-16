@@ -693,112 +693,147 @@ from core.hash_audit_engine import test_engine, LocalHashAuditEngine
 import json
 
 
-def handle_local_hash_audit_engine() -> None:
-    """[4] Yerel Hash Denetim Motoru operasyonu."""
-    clear_screen()
-    print_banner(version=settings.version)
+def _select_audit_target() -> Optional[Tuple[str, str]]:
+    """Denetim hedefini (hash + açıklama) kullanıcıdan alır. İptalde None döner."""
     print_header("[4] YEREL HASH DENETİM MOTORU (Local Hash Audit Engine)")
 
     print("Denetim için hedef kaynağı seçiniz:")
-    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Sentetik Test Profilinden Yükle (data/synthetic_profiles/)")
-    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Manuel Hedef SHA-256 Hash'i Gir")
-    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Ana Menüye Dön\n")
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Kayıtlı Hedef Profilinden Yükle (data/synthetic_profiles/)")
+    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Manuel Hedef Gir (SHA-256 Hash veya Açık Parola)")
+    print(f" {Fore.YELLOW}[0]{Style.RESET_ALL} Ana Menüye Dön\n")
 
-    sub_choice = input(f"{Fore.GREEN}{Style.BRIGHT}Seçiminiz [1-3]: {Style.RESET_ALL}").strip()
-
-    target_hash = ""
-    target_description = ""
+    sub_choice = input(f"{Fore.GREEN}{Style.BRIGHT}Seçiminiz [0-2]: {Style.RESET_ALL}").strip()
 
     if sub_choice == "1":
         profiles_dir = BASE_DIR / "data" / "synthetic_profiles"
         profile_files = list(profiles_dir.glob("*.json"))
         if not profile_files:
-            print_error("Sentetik profil dosyası bulunamadı!")
-            pause_prompt()
-            return
+            print_error("Kayıtlı hedef profili bulunamadı! Önce Menü [2] ile bir hedef profili üretip kaydediniz.")
+            return None
 
-        print_header("MEVCUT SENTETİK PROFİLLER")
+        print_header("KAYITLI HEDEF PROFİLLERİ")
         for i, pf in enumerate(profile_files, 1):
-            with open(pf, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {data.get('target_name', pf.stem)} (Hash: {data['ground_truth']['target_hash'][:12]}...)")
+            try:
+                with open(pf, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                gt = data.get("ground_truth", {})
+                has_hash = bool(gt.get("target_hash"))
+                hash_info = f"Hash: {gt['target_hash'][:12]}..." if has_hash else f"{Fore.YELLOW}Hash yok (test parolası girilmemiş){Style.RESET_ALL}"
+                print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {data.get('target_name', pf.stem)} ({hash_info})")
+            except Exception:
+                print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {pf.stem} ({Fore.RED}profil okunamadı{Style.RESET_ALL})")
 
-        idx_str = input(f"\n{Fore.GREEN}Profil Numarası Seçiniz [1-{len(profile_files)}]: {Style.RESET_ALL}").strip()
+        idx_str = input(f"\n{Fore.GREEN}Profil Numarası Seçiniz [1-{len(profile_files)}, ENTER=iptal]: {Style.RESET_ALL}").strip()
+        if not idx_str:
+            return None
         try:
             chosen = profile_files[int(idx_str) - 1]
             with open(chosen, "r", encoding="utf-8") as f:
                 data = json.load(f)
             target_hash = data["ground_truth"]["target_hash"]
+            if not target_hash:
+                print_error("Bu profilin kayıtlı bir test parolası/hash'i yok. Lütfen [2] ile manuel hash girin.")
+                return None
             target_description = f"{data.get('target_name')} ({data['ground_truth'].get('plain_password_hint')})"
+            return target_hash, target_description
         except Exception:
             print_error("Geçersiz seçim!")
-            pause_prompt()
-            return
+            return None
 
     elif sub_choice == "2":
-        target_hash = input(f"\n{Fore.GREEN}Hedef SHA-256 Hash'i giriniz: {Style.RESET_ALL}").strip()
-        if len(target_hash) != 64:
-            print_error("Geçersiz SHA-256 hash uzunluğu! (64 karakter olmalıdır)")
-            pause_prompt()
-            return
-        target_description = f"Manuel Hash ({target_hash[:10]}...)"
-    elif sub_choice == "3":
-        return
+        user_in = input(f"\n{Fore.GREEN}Hedef SHA-256 Hash veya Açık Parola giriniz: {Style.RESET_ALL}").strip()
+        if not user_in:
+            return None
+        if len(user_in) == 64 and all(c in "0123456789abcdefABCDEF" for c in user_in):
+            target_hash = user_in.lower()
+            target_description = f"Manuel Hash ({target_hash[:10]}...)"
+        else:
+            target_hash = LocalHashAuditEngine.compute_hash_sha256(user_in)
+            target_description = f"Manuel Parola ('{user_in}' -> {target_hash[:10]}...)"
+        return target_hash, target_description
+
+    elif sub_choice == "0" or not sub_choice:
+        return None
     else:
         print_error("Geçersiz seçenek.")
-        pause_prompt()
-        return
+        return None
 
-    # Wordlist seçimi
+
+def _select_audit_wordlist() -> Optional[Path]:
+    """Denetimde kullanılacak wordlist dosyasını kullanıcıdan alır. İptalde None döner."""
     print_header("KULLANILACAK WORDLIST SEÇİMİ")
     available_wordlists = []
-    # 1. Varsayılan liste
     default_wl = BASE_DIR / "wordlists" / "default.txt"
     if default_wl.is_file():
         available_wordlists.append(default_wl)
-    # 2. Üretilen listeler
     gen_dir = BASE_DIR / "wordlists" / "generated"
     if gen_dir.is_dir():
-        available_wordlists.extend(list(gen_dir.glob("*.txt")))
+        available_wordlists.extend(sorted(gen_dir.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True))
 
     if not available_wordlists:
         print_error("Kullanılabilir wordlist bulunamadı! Önce Menü [1], [2] veya [3] ile liste üretiniz.")
-        pause_prompt()
-        return
+        return None
 
     for i, wl in enumerate(available_wordlists, 1):
-        size_kb = round(wl.stat().st_size / 1024, 1)
-        print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {wl.name} ({size_kb} KB)")
+        try:
+            total_lines = wordlist_manager.get_wordlist_stats(wl)["total_lines"]
+            count_info = f"{total_lines:,} parola"
+        except Exception:
+            count_info = f"{round(wl.stat().st_size / 1024, 1)} KB"
+        label = "Varsayılan Liste" if wl == default_wl else "Üretilmiş Liste"
+        print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {wl.name} ({label}, {count_info})")
+    print(f" {Fore.YELLOW}[0]{Style.RESET_ALL} Vazgeç / Geri")
 
-    wl_choice = input(f"\n{Fore.GREEN}Wordlist Seçiniz [1-{len(available_wordlists)}]: {Style.RESET_ALL}").strip()
+    wl_choice = input(f"\n{Fore.GREEN}Wordlist Seçiniz [0-{len(available_wordlists)}]: {Style.RESET_ALL}").strip()
+    if wl_choice == "0" or not wl_choice:
+        return None
     try:
-        chosen_wl = available_wordlists[int(wl_choice) - 1]
+        return available_wordlists[int(wl_choice) - 1]
     except Exception:
         print_error("Geçersiz wordlist seçimi!")
+        return None
+
+
+def handle_local_hash_audit_engine() -> None:
+    """[4] Yerel Hash Denetim Motoru operasyonu."""
+    clear_screen()
+    print_banner(version=settings.version)
+
+    target = _select_audit_target()
+    if target is None:
         pause_prompt()
         return
+    target_hash, target_description = target
 
-    # Denetimi başlat
-    print_info(f"Denetim başlatılıyor...\nHedef: {target_description}\nListe: {chosen_wl.name}")
-    result = test_engine.audit_wordlist_stream(
-        target_hash=target_hash,
-        wordlist_path=chosen_wl
-    )
+    while True:
+        chosen_wl = _select_audit_wordlist()
+        if chosen_wl is None:
+            break
 
-    print_header("DENETİM SONUÇ RAPORU")
-    if result.matched:
-        print_success("PAROLA BAŞARIYLA TESPİT EDİLDİ (MATCH)!")
-        print(f" • Açık Parola       : {Fore.YELLOW}{Style.BRIGHT}{result.matched_password}{Style.RESET_ALL}")
-        print(f" • Bulunduğu Sıra    : {Fore.GREEN}{result.position:,}. denemede{Style.RESET_ALL}")
-        print(f" • Test Edilen Aday  : {result.total_tested:,}")
-        print(f" • Geçen Süre        : {result.duration_seconds} saniye")
-        print(f" • Ortalama Hız      : {result.hashes_per_second:,.0f} hash/sn")
-    else:
-        print_error("EŞLEŞME BULUNAMADI!")
-        print(f" • Test Edilen Aday  : {result.total_tested:,}")
-        print(f" • Geçen Süre        : {result.duration_seconds} saniye")
-        print(f" • Ortalama Hız      : {result.hashes_per_second:,.0f} hash/sn")
-        print_info("İpucu: Hedefe yönelik AI Wordlist (Menü [2]) üreterek tekrar deneyebilirsiniz.")
+        print_info(f"Denetim başlatılıyor...\nHedef: {target_description}\nListe: {chosen_wl.name}")
+        result = test_engine.audit_wordlist_stream(
+            target_hash=target_hash,
+            wordlist_path=chosen_wl
+        )
+
+        print_header("DENETİM SONUÇ RAPORU")
+        if result.matched:
+            print_success("PAROLA BAŞARIYLA TESPİT EDİLDİ (MATCH)!")
+            print(f" • Açık Parola       : {Fore.YELLOW}{Style.BRIGHT}{result.matched_password}{Style.RESET_ALL}")
+            print(f" • Bulunduğu Sıra    : {Fore.GREEN}{result.position:,}. denemede{Style.RESET_ALL}")
+            print(f" • Test Edilen Aday  : {result.total_tested:,}")
+            print(f" • Geçen Süre        : {result.duration_seconds} saniye")
+            print(f" • Ortalama Hız      : {result.hashes_per_second:,.0f} hash/sn")
+        else:
+            print_error("EŞLEŞME BULUNAMADI!")
+            print(f" • Test Edilen Aday  : {result.total_tested:,}")
+            print(f" • Geçen Süre        : {result.duration_seconds} saniye")
+            print(f" • Ortalama Hız      : {result.hashes_per_second:,.0f} hash/sn")
+            print_info("İpucu: Hedefe yönelik AI Wordlist (Menü [2]) üreterek tekrar deneyebilirsiniz.")
+
+        again = input(f"\n{Fore.CYAN}Aynı hedefi başka bir wordlist ile tekrar denemek ister misiniz? [e/H]: {Style.RESET_ALL}").strip().lower()
+        if again not in ('e', 'evet', 'y', 'yes'):
+            break
 
     pause_prompt()
 
