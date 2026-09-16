@@ -47,7 +47,7 @@ def display_system_status() -> None:
 def display_menu() -> None:
     """Ana menü seçeneklerini yazdırır."""
     print(f"{Fore.YELLOW}{Style.BRIGHT}[ ANA OPERASYON MENÜSÜ ]{Style.RESET_ALL}\n")
-    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Varsayılan Wordlist İşlemleri (Default Wordlist Operations)")
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Wordlist & Sözlük Havuzu Yönetimi (Genel & Hedefli Listeler)")
     print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yapay Zeka Hedefli Liste Üretimi (AI Targeted Wordlist)")
     print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)")
     print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Yerel Hash Denetim Motoru (Local Hash Audit Engine)")
@@ -58,26 +58,32 @@ def display_menu() -> None:
 
 
 def handle_default_wordlist_operations() -> None:
-    """[1] Varsayılan Wordlist İşlemleri alt menüsü ve operasyonları."""
+    """[1] Wordlist & Sözlük Havuzu Yönetimi alt menüsü ve operasyonları."""
     while True:
         clear_screen()
         print_banner(version=settings.version)
-        print_header("VARSAYILAN WORDLIST İŞLEMLERİ (Default Wordlist Operations)")
+        print_header("WORDLIST & SÖZLÜK HAVUZU YÖNETİMİ")
         
         default_file = wordlist_manager.default_wordlist_path
-        print(f"{Fore.LIGHTBLACK_EX}Hedef Dosya: {default_file}{Style.RESET_ALL}\n")
-        print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Varsayılan Liste İstatistiklerini Göster (Boyut, Satır Sayısı, Min/Max)")
-        print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Varsayılan Listeyi Temizle & Filtrele")
-        print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Varsayılan Listeden İlk 20 Parola Örneğini Görüntüle")
-        print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Üretilen Özel/Hedefli Listeleri Görüntüle (wordlists/generated/)")
-        print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Ana Menüye Dön\n")
 
-        sub_choice = input(f"{Fore.GREEN}{Style.BRIGHT}İşlem Seçiniz [1-5]: {Style.RESET_ALL}").strip()
+        print(f"{Fore.YELLOW}{Style.BRIGHT}--- [A] GENEL / VARSAYILAN SÖZLÜK (Default Wordlist) ---{Style.RESET_ALL}")
+        print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Varsayılan Liste Durumu & İstatistikleri ({default_file.name})")
+        print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Varsayılan Listeden İlk 20 Parola Örneğini Görüntüle")
+        print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Varsayılan Listeyi Filtrele & Temizle\n")
+
+        print(f"{Fore.YELLOW}{Style.BRIGHT}--- [B] KİŞİYE ÖZEL AI LİSTELERİ (Targeted & Hybrid Wordlists) ---{Style.RESET_ALL}")
+        print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Üretilen Kişiye Özel Listeleri İncele (wordlists/generated/)")
+        print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Üretilen Özel Listeleri Sil / Temizle (Tekil veya Toplu)\n")
+
+        print(f"{Fore.LIGHTBLACK_EX}--- Diğer ---{Style.RESET_ALL}")
+        print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Ana Menüye Dön\n")
+
+        sub_choice = input(f"{Fore.GREEN}{Style.BRIGHT}İşlem Seçiniz [1-6]: {Style.RESET_ALL}").strip()
 
         if sub_choice == "1":
             try:
                 stats = wordlist_manager.get_wordlist_stats(default_file)
-                print_header("WORDLIST İSTATİSTİKLERİ")
+                print_header("GENEL WORDLIST İSTATİSTİKLERİ")
                 print(f" • Dosya Adı        : {stats['file_name']}")
                 print(f" • Toplam Satır     : {stats['total_lines']:,}")
                 print(f" • Dosya Boyutu     : {stats['file_size_bytes']:,} bayt")
@@ -90,6 +96,19 @@ def handle_default_wordlist_operations() -> None:
             pause_prompt()
 
         elif sub_choice == "2":
+            try:
+                print_header("VARSAYILAN LİSTE - İLK 20 PAROLA ÖRNEĞİ")
+                count = 0
+                for pwd in wordlist_manager.stream_lines(default_file):
+                    count += 1
+                    print(f" {Fore.LIGHTBLUE_EX}{count:02d}.{Style.RESET_ALL} {pwd}")
+                    if count >= 20:
+                        break
+            except Exception as e:
+                print_error(f"Parola listesi okunurken hata: {e}")
+            pause_prompt()
+
+        elif sub_choice == "3":
             try:
                 custom_cl = input(f"{Fore.CYAN}Temizlenmiş liste dosya adı [ENTER = default_cleaned.txt]: {Style.RESET_ALL}").strip()
                 out_name = custom_cl if custom_cl else "default_cleaned.txt"
@@ -116,28 +135,15 @@ def handle_default_wordlist_operations() -> None:
                 print_error(f"Filtreleme işlemi sırasında hata: {e}")
             pause_prompt()
 
-        elif sub_choice == "3":
-            try:
-                print_header("İLK 20 PAROLA ÖRNEĞİ")
-                count = 0
-                for pwd in wordlist_manager.stream_lines(default_file):
-                    count += 1
-                    print(f" {Fore.LIGHTBLUE_EX}{count:02d}.{Style.RESET_ALL} {pwd}")
-                    if count >= 20:
-                        break
-            except Exception as e:
-                print_error(f"Parola listesi okunurken hata: {e}")
-            pause_prompt()
-
         elif sub_choice == "4":
             try:
-                gen_files = list(wordlist_manager.generated_dir.glob("*.txt"))
+                gen_files = sorted(list(wordlist_manager.generated_dir.glob("*.txt")), key=lambda p: p.stat().st_mtime, reverse=True)
                 if not gen_files:
-                    print_warning("Henüz üretilmiş bir liste bulunmuyor. Önce Menü [2] veya [3] ile liste üretiniz.")
+                    print_warning("Henüz üretilmiş bir özel liste bulunmuyor. Önce Menü [2] veya [3] ile liste üretiniz.")
                     pause_prompt()
                     continue
 
-                print_header("ÜRETİLEN LİSTELER (wordlists/generated/)")
+                print_header("KİŞİYE ÖZEL ÜRETİLEN LİSTELER (wordlists/generated/)")
                 for i, gf in enumerate(gen_files, 1):
                     size_kb = round(gf.stat().st_size / 1024, 2)
                     print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {gf.name} ({size_kb} KB)")
@@ -160,9 +166,55 @@ def handle_default_wordlist_operations() -> None:
             pause_prompt()
 
         elif sub_choice == "5":
+            try:
+                gen_files = sorted(list(wordlist_manager.generated_dir.glob("*.txt")), key=lambda p: p.stat().st_mtime, reverse=True)
+                if not gen_files:
+                    print_warning("Temizlenecek veya silinecek özel liste bulunmuyor.")
+                    pause_prompt()
+                    continue
+
+                print_header("ÖZEL WORDLIST SİLME VE TEMİZLEME")
+                for i, gf in enumerate(gen_files, 1):
+                    size_kb = round(gf.stat().st_size / 1024, 2)
+                    print(f" {Fore.CYAN}[{i}]{Style.RESET_ALL} {gf.name} ({size_kb} KB)")
+                print(f" {Fore.RED}[T]{Style.RESET_ALL} Tüm Üretilen Listeleri Temizle (Toplu Sıfırlama)")
+                print(f" {Fore.YELLOW}[0]{Style.RESET_ALL} Vazgeç / İptal")
+
+                del_input = input(f"\n{Fore.GREEN}Silmek istediğiniz dosya no veya [T]: {Style.RESET_ALL}").strip().upper()
+                if del_input in ("", "0"):
+                    continue
+                elif del_input == "T":
+                    confirm = input(f"{Fore.RED}DİKKAT: Üretilen TÜM listeler silinecektir! Emin misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
+                    if confirm in ('e', 'evet', 'y', 'yes'):
+                        deleted_count = 0
+                        for f in wordlist_manager.generated_dir.glob("*"):
+                            if f.is_file():
+                                f.unlink()
+                                deleted_count += 1
+                        print_success(f"Tüm üretilen listeler temizlendi ({deleted_count} dosya silindi).")
+                    else:
+                        print_info("İşlem kullanıcı tarafından iptal edildi.")
+                elif del_input.isdigit() and 1 <= int(del_input) <= len(gen_files):
+                    chosen_del = gen_files[int(del_input) - 1]
+                    confirm = input(f"'{chosen_del.name}' kalıcı olarak silinsin mi? [E/h]: ").strip().lower()
+                    if confirm in ('e', 'evet', 'y', 'yes'):
+                        chosen_del.unlink()
+                        meta_f = chosen_del.with_name(f"{chosen_del.name}.metadata.json")
+                        if meta_f.exists():
+                            meta_f.unlink()
+                        print_success(f"'{chosen_del.name}' başarıyla silindi.")
+                    else:
+                        print_info("İşlem iptal edildi.")
+                else:
+                    print_error("Geçersiz seçim!")
+            except Exception as e:
+                print_error(f"Silme işlemi sırasında hata: {e}")
+            pause_prompt()
+
+        elif sub_choice == "6":
             break
         else:
-            print_error("Lütfen 1-5 arasında geçerli bir seçenek giriniz.")
+            print_error("Lütfen 1-6 arasında geçerli bir seçenek giriniz.")
             pause_prompt()
 
 

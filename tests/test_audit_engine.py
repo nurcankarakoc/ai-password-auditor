@@ -118,3 +118,30 @@ class TestLocalHashAuditEngine:
         assert saved_data["target_id"] == "target_test_hedef"
         assert saved_data["ground_truth"]["plain_password_hint"] == "Gizli123!"
         assert len(saved_data["ground_truth"]["target_hash"]) == 64
+
+    def test_handle_wordlist_bulk_delete(self, tmp_path: Path, monkeypatch):
+        """Üretilen listelerin toplu silme işlemi test edilir."""
+        from core.wordlist_manager import wordlist_manager
+        from main import handle_default_wordlist_operations
+
+        # Test için geçici generated_dir ayarla
+        gen_dir = tmp_path / "generated"
+        gen_dir.mkdir(parents=True, exist_ok=True)
+        test_file = gen_dir / "ai_targeted_sample.txt"
+        test_file.write_text("Password123\n", encoding="utf-8")
+        test_meta = gen_dir / "ai_targeted_sample.txt.metadata.json"
+        test_meta.write_text("{}", encoding="utf-8")
+
+        monkeypatch.setattr(wordlist_manager, "generated_dir", gen_dir)
+        monkeypatch.setattr("main.clear_screen", lambda: None)
+        monkeypatch.setattr("main.pause_prompt", lambda: None)
+
+        # Seçenek 5 (silme), ardından T (tümü), ardından 'e' (onay), ardından 6 (ana menüye dön)
+        inputs = iter(["5", "T", "e", "6"])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+        handle_default_wordlist_operations()
+
+        assert not test_file.exists()
+        assert not test_meta.exists()
+
