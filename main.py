@@ -72,7 +72,7 @@ def handle_default_wordlist_operations() -> None:
         print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Wordlist Filtrele & Temizle (Kaynak Seçerek)\n")
 
         print(f"{Fore.YELLOW}{Style.BRIGHT}--- [B] KİŞİYE ÖZEL AI LİSTELERİ (Targeted & Hybrid Wordlists) ---{Style.RESET_ALL}")
-        print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Üretilen Kişiye Özel Listeleri İncele (wordlists/generated/)")
+        print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Üretilen Kişiye Özel Listeleri İncele (Baştan / Sondan / Aralık / Tümü)")
         print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Üretilen Özel Listeleri Sil / Temizle (Tekil veya Toplu)\n")
 
         print(f"{Fore.LIGHTBLACK_EX}--- Diğer ---{Style.RESET_ALL}")
@@ -263,16 +263,74 @@ def handle_default_wordlist_operations() -> None:
                 gf_idx = input(f"\n{Fore.GREEN}Görüntülemek istediğiniz dosya no [1-{len(gen_files)}]: {Style.RESET_ALL}").strip()
                 try:
                     chosen_gf = gen_files[int(gf_idx) - 1]
-                    print_header(f"İÇERİK ÖNİZLEME: {chosen_gf.name}")
-                    count = 0
-                    for pwd in wordlist_manager.stream_lines(chosen_gf):
-                        count += 1
-                        print(f" {Fore.LIGHTBLUE_EX}{count:03d}.{Style.RESET_ALL} {pwd}")
-                        if count >= 30:
-                            print(f"{Fore.LIGHTBLACK_EX}... (İlk 30 parola gösterildi, dosya toplam {chosen_gf.stat().st_size} bayt){Style.RESET_ALL}")
-                            break
                 except Exception:
                     print_error("Geçersiz seçim!")
+                    pause_prompt()
+                    continue
+
+                gf_stats = wordlist_manager.get_wordlist_stats(chosen_gf)
+                gf_total = gf_stats["total_lines"]
+
+                print_header(f"İÇERİK ÖNİZLEME: {chosen_gf.name}")
+                print(f"{Fore.LIGHTBLACK_EX}Dosyada toplam {gf_total:,} parola bulunuyor.{Style.RESET_ALL}\n")
+                print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Baştan N Adet")
+                print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Sondan N Adet")
+                print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Belirli Aralık (örn: 100-150)")
+                print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Tümünü Listele")
+                print(f" {Fore.YELLOW}[0]{Style.RESET_ALL} Vazgeç / İptal")
+
+                gf_view_choice = input(f"\n{Fore.GREEN}Seçiminiz [0-4]: {Style.RESET_ALL}").strip()
+
+                gf_results: List[Tuple[int, str]] = []
+
+                if gf_view_choice == "1":
+                    n_in = input(f"{Fore.CYAN}Kaç adet gösterilsin? [ENTER = 30]: {Style.RESET_ALL}").strip()
+                    n = int(n_in) if n_in.isdigit() and int(n_in) > 0 else 30
+                    gf_results = wordlist_manager.get_head(chosen_gf, n=n)
+
+                elif gf_view_choice == "2":
+                    n_in = input(f"{Fore.CYAN}Kaç adet gösterilsin? [ENTER = 30]: {Style.RESET_ALL}").strip()
+                    n = int(n_in) if n_in.isdigit() and int(n_in) > 0 else 30
+                    gf_results = wordlist_manager.get_tail(chosen_gf, n=n)
+
+                elif gf_view_choice == "3":
+                    range_in = input(f"{Fore.CYAN}Aralık girin (örn: 100-150): {Style.RESET_ALL}").strip()
+                    try:
+                        start_s, end_s = range_in.split("-", 1)
+                        start_n, end_n = int(start_s.strip()), int(end_s.strip())
+                        if start_n < 1 or end_n < start_n:
+                            raise ValueError
+                        gf_results = wordlist_manager.get_range(chosen_gf, start=start_n, end=end_n)
+                    except ValueError:
+                        print_error("Geçersiz aralık formatı! Örnek: 100-150")
+                        pause_prompt()
+                        continue
+
+                elif gf_view_choice == "4":
+                    if gf_total > 2000:
+                        confirm = input(
+                            f"{Fore.RED}DİKKAT: Liste {gf_total:,} satır içeriyor, terminalde tümünü göstermek uzun sürebilir. "
+                            f"Devam edilsin mi? [E/h]: {Style.RESET_ALL}"
+                        ).strip().lower()
+                        if confirm not in ('e', 'evet', 'y', 'yes'):
+                            print_info("İşlem kullanıcı tarafından iptal edildi.")
+                            pause_prompt()
+                            continue
+                    gf_results = wordlist_manager.get_range(chosen_gf, start=1, end=None)
+
+                elif gf_view_choice == "0":
+                    continue
+                else:
+                    print_error("Geçersiz seçim!")
+                    pause_prompt()
+                    continue
+
+                if not gf_results:
+                    print_warning("Gösterilecek satır bulunamadı.")
+                else:
+                    print_header(f"SONUÇLAR ({len(gf_results):,} satır)")
+                    for idx, pwd in gf_results:
+                        print(f" {Fore.LIGHTBLUE_EX}{idx:06d}.{Style.RESET_ALL} {pwd}")
             except Exception as e:
                 print_error(f"Listeler taranırken hata: {e}")
             pause_prompt()
