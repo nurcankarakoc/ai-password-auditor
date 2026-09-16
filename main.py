@@ -192,24 +192,26 @@ def handle_default_wordlist_operations() -> None:
                 max_in = input(f"{Fore.CYAN}2. Maksimum Parola Uzunluğu [ENTER = {default_max}]: {Style.RESET_ALL}").strip()
                 max_val = int(max_in) if max_in.isdigit() and int(max_in) >= min_val else default_max
 
-                # 3. Karakter kuralı
-                print(f"\n{Fore.CYAN}3. Parola Karakter Kuralı Seçiniz:{Style.RESET_ALL}")
-                print(f"{Fore.LIGHTBLACK_EX}   Listede sadece seçtiğiniz kurala UYAN parolalar kalır, diğerleri elenir.{Style.RESET_ALL}")
-                print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Tüm Parolalar — hiçbir karakter kısıtlaması uygulanmaz, liste olduğu gibi kalır")
-                print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Rakam İçerenler — en az 1 rakam şart  {Fore.GREEN}(kalır: pass123){Style.RESET_ALL} {Fore.RED}(elenir: password){Style.RESET_ALL}")
-                print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Harf + Rakam (Alfanümerik) — hem harf hem rakam şart  {Fore.GREEN}(kalır: admin2024){Style.RESET_ALL} {Fore.RED}(elenir: admin, 123456){Style.RESET_ALL}")
-                print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sadece Rakam (PIN) — parola baştan sona rakam olmalı  {Fore.GREEN}(kalır: 123456){Style.RESET_ALL} {Fore.RED}(elenir: pass123){Style.RESET_ALL}")
-                print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Özel Karakter İçerenler — en az 1 özel karakter (!, @, _, . vb.) şart  {Fore.GREEN}(kalır: pass!123){Style.RESET_ALL} {Fore.RED}(elenir: pass123){Style.RESET_ALL}")
-                rule_in = input(f"{Fore.GREEN}Seçiminiz [1-5, ENTER=1]: {Style.RESET_ALL}").strip()
+                # 3. Karakter kuralı — art arda Evet/Hayır sorularıyla belirlenir
+                print(f"\n{Fore.CYAN}3. Parola Karakter Kuralı:{Style.RESET_ALL}")
+                print(f"{Fore.LIGHTBLACK_EX}   Aşağıdaki sorulara sırayla E/h cevabı verin.{Style.RESET_ALL}\n")
 
-                rule_map = {
-                    "1": "all",
-                    "2": "digit",
-                    "3": "alphanumeric",
-                    "4": "numeric_only",
-                    "5": "special"
-                }
-                char_rule = rule_map.get(rule_in, "all")
+                def ask_yes_no(question: str) -> bool:
+                    ans = input(f"{Fore.CYAN}{question} [e/H]: {Style.RESET_ALL}").strip().lower()
+                    return ans in ('e', 'evet', 'y', 'yes')
+
+                if ask_yes_no("Parola SADECE rakamlardan mı oluşsun? (örn: PIN kodu, 123456)"):
+                    char_rule = "numeric_only"
+                elif ask_yes_no("Parolada en az 1 ÖZEL karakter (!, @, _, . vb.) bulunması şart mı? (örn: pass!123)"):
+                    char_rule = "special"
+                elif ask_yes_no("Parolada hem HARF hem RAKAM birlikte bulunması şart mı? (örn: admin2024)"):
+                    char_rule = "alphanumeric"
+                elif ask_yes_no("Parolada en az 1 RAKAM bulunması şart mı? (örn: pass123)"):
+                    char_rule = "digit"
+                else:
+                    char_rule = "all"
+
+                print(f"{Fore.LIGHTBLACK_EX}   -> Seçilen kural: {char_rule}{Style.RESET_ALL}")
 
                 # 4. Büyük / Küçük harf tekilleştirme
                 case_in = input(f"\n{Fore.CYAN}4. Büyük/Küçük harf farkı korunsun mu? (Örn: 'Admin' ile 'admin' ayrı tutulsun) [E/h]: {Style.RESET_ALL}").strip().lower()
