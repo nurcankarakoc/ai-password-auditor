@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 8 Kıyaslama Modülü (Benchmark) Testleri
+Cybzenor - Adım 8 Kıyaslama Modülü (Benchmark) Testleri
 Default vs AI Targeted vs Hybrid kıyaslaması ve rapor üretimi.
 """
 
@@ -7,7 +7,7 @@ import json
 import pytest
 from pathlib import Path
 from core.benchmark import BenchmarkSuite
-from core.test_engine import LocalHashAuditEngine
+from core.hash_audit_engine import LocalHashAuditEngine
 
 
 class TestBenchmarkSuite:

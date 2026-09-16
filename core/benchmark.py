@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Kıyaslama ve Başarı Analiz Modülü (Benchmark)
+Cybzenor - Kıyaslama ve Başarı Analiz Modülü (Benchmark)
 Farklı wordlist türlerini (Varsayılan, AI Hedefli, Hibrit) aynı hedef hash üzerinde
 yarıştırarak hız, bulunan sıra, süre ve verimlilik skorunu bilimsel olarak ölçer.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
-from core.test_engine import LocalHashAuditEngine
+from core.hash_audit_engine import LocalHashAuditEngine
 from core.wordlist_manager import wordlist_manager
 from config.settings import BASE_DIR
 from utils.logger import logger
@@ -128,7 +128,7 @@ class BenchmarkSuite:
         report_path = self.reports_dir / report_filename
 
         report_data: Dict[str, Any] = {
-            "title": "Smart Password Auditor - Benchmark Karşılaştırma Raporu",
+            "title": "Cybzenor - Benchmark Karşılaştırma Raporu",
             "timestamp": start_dt.isoformat(),
             "target_hash": target_hash,
             "target_profile": target_profile_name or "Bilinmeyen Hedef",

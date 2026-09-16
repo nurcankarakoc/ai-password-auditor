@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Güvenlik Denetleyicisi (Safety Controller)
+Cybzenor - Güvenlik Denetleyicisi (Safety Controller)
 Etik güvenlik sınırlarını koruyan, anormal yanıtları, HTTP 429 (Rate Limit),
 hesap kilitleme (Account Lockout) veya CAPTCHA durumlarını algılayıp
 denetimi derhal ve güvenli biçimde durduran mekanizma.

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 7 Güvenlik Denetleyicisi (Safety Controller) Testleri
+Cybzenor - Adım 7 Güvenlik Denetleyicisi (Safety Controller) Testleri
 Rate-limit, Lockout, CAPTCHA ve maksimum ardışık hata denetimleri.
 """
 

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Yerel Hash Denetim Motoru (Local Hash Audit Engine)
+Cybzenor - Yerel Hash Denetim Motoru (Local Hash Audit Engine)
 Wordlist adaylarını streaming ile okuyup yerel hedef SHA-256 hash'leri üzerinde
 doğrulayan, denetim pozisyonunu ve sürelerini ölçen motor.
 """

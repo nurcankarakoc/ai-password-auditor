@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 3 AI Veri Katmanı Testleri
+Cybzenor - Adım 3 AI Veri Katmanı Testleri
 TargetProfile şeması, BaseAIProvider soyutlaması ve Fallback kural motoru testleri.
 """
 

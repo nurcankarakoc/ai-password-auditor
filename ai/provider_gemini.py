@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Google Gemini AI Sağlayıcısı
+Cybzenor - Google Gemini AI Sağlayıcısı
 google-genai SDK ile Structured Output (TargetProfile) dönüşümü ve kural tabanlı fallback mekanizması.
 """
 

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Güvenli Loglama Modülü
+Cybzenor - Güvenli Loglama Modülü
 Hassas verileri (parola, API key, token vb.) otomatik maskeleyen ve
 çift kanallı (Konsol + Dosya) loglama sağlayan mekanizma.
 """
@@ -54,7 +54,7 @@ class SensitiveDataFilter(logging.Filter):
         return True
 
 
-def setup_logger(name: str = "SPA", log_file: Optional[Path] = None) -> logging.Logger:
+def setup_logger(name: str = "Cybzenor", log_file: Optional[Path] = None) -> logging.Logger:
     """
     Uygulama için yapılandırılmış Logger nesnesi döndürür.
     """

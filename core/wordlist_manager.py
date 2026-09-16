@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Wordlist Yöneticisi
+Cybzenor - Wordlist Yöneticisi
 Düşük RAM kullanımı için streaming (generator) dosya I/O, tekilleştirme,
 karakter uzunluğu filtreleme ve metadata yönetim motoru.
 """

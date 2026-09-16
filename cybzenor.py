@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Cybzenor (Smart Password Auditor) - CLI ve Komut Satırı Arayüzü
+Cybzenor - CLI ve Komut Satırı Arayüzü
 Kullanıcıların 'python cybzenor.py view 10' veya doğrudan interaktif kabuk üzerinden
 hızlıca wordlist'leri görüntülemesini, aramasını ve denetlemesini sağlar.
 """

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Skorlama ve Önceliklendirme Motoru (Ranking Engine)
+Cybzenor - Skorlama ve Önceliklendirme Motoru (Ranking Engine)
 Adayları semantik yakınlık, ilişki, tarih ve leetspeak ağırlıklarına göre skorlar,
 önceliklendirir ve wordlist üretim akışını yönetir.
 """

@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 1 Birim ve Entegrasyon Testleri
+Cybzenor - Adım 1 Birim ve Entegrasyon Testleri
 Konfigürasyon doğrulama, log maskeleme ve CLI işlevsellik testleri.
 """
 
@@ -17,7 +17,7 @@ class TestConfigValidation:
     def test_default_settings_load(self):
         """Varsayılan ayarların hatasız yüklendiğini doğrula."""
         settings = load_settings()
-        assert settings.app_name == "Smart Password Auditor"
+        assert settings.app_name == "Cybzenor"
         assert settings.wordlist.min_length == 6
         assert settings.wordlist.max_length == 32
         assert settings.wordlist.max_candidates > 0
@@ -77,7 +77,7 @@ class TestSensitiveDataMasking:
         """Gerçek LogRecord nesnesi üzerindeki filtreleme testi."""
         filter_instance = SensitiveDataFilter(mask_enabled=True)
         record = logging.LogRecord(
-            name="SPA",
+            name="Cybzenor",
             level=logging.INFO,
             pathname="test.py",
             lineno=1,

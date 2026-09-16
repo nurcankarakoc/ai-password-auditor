@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Adım 2 Wordlist Manager Testleri
+Cybzenor - Adım 2 Wordlist Manager Testleri
 Streaming dosya okuma, uzunluk filtreleme, tekilleştirme ve metadata doğrulama testleri.
 """
 

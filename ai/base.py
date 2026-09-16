@@ -1,5 +1,5 @@
 """
-Smart Password Auditor (SPA) - Soyut AI Sağlayıcı Arayüzü
+Cybzenor - Soyut AI Sağlayıcı Arayüzü
 Farklı yapay zeka modelleri (Gemini, Local LLM, Mock vb.) için ortak kontrat.
 """
 
