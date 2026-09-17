@@ -1008,40 +1008,54 @@ def handle_online_login_audit() -> None:
         print_warning(f"Otomatik ön deneme başarısız oldu (ağ hatası olabilir): {e}")
         print_info("Yine de devam edebilirsin, ama aşağıdaki seçimi yukarıdaki yanıt olmadan tahmine dayalı yapman gerekecek.")
 
+    risky_status = probe_status in (200, 301, 302, 303)
+    default_detect = "2" if risky_status else "3"
+
     print(f"\n{Fore.CYAN}10. Başarı Nasıl Tespit Edilsin?{Style.RESET_ALL}")
-    print(f"{Fore.LIGHTBLACK_EX}    Yukarıdaki YANLIŞ parola denemesinin yanıtıyla, doğru bir parola girildiğinde alacağın yanıt")
-    print(f"    muhtemelen FARKLI olacaktır (farklı metin, farklı status kodu ya da bir yönlendirme). O farkı burada tanımla.{Style.RESET_ALL}")
-    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Yanıt metninde bir BAŞARI belirteci ara — SADECE doğru girişte görünen bir kelime/ifade")
-    print(f"      {Fore.LIGHTBLACK_EX}örn: 'Hoş geldiniz', 'Dashboard', 'Çıkış Yap' — yukarıdaki yanlış-parola yanıtında GEÇMEYEN bir ifade seç{Style.RESET_ALL}")
-    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yanıt metninde bir HATA belirteci ara — bu ifadenin YOKLUĞU başarı sayılır")
-    print(f"      {Fore.LIGHTBLACK_EX}örn: yukarıda gördüğün hata mesajını aynen yapıştır (örn: 'Hatalı parola', 'Invalid credentials'){Style.RESET_ALL}")
-    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı)")
-    if probe_status in (200, 301, 302, 303):
-        print(f"      {Fore.RED}(Yukarıdaki uyarı nedeniyle bu site için ÖNERİLMEZ){Style.RESET_ALL}")
-    default_detect = "2" if probe_status in (200, 301, 302, 303) else "3"
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Doğru girişte görünen bir ifadeyi ara (başarı belirteci)")
+    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yukarıda gördüğün hata mesajını ara — yokluğu başarı sayılır (hata belirteci)")
+    status_note = f" {Fore.RED}[bu site için önerilmez, yukarıya bak]{Style.RESET_ALL}" if risky_status else ""
+    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı){status_note}")
     detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-3, ENTER={default_detect}]: {Style.RESET_ALL}").strip() or default_detect
 
-    def _ask_indicator(label: str) -> str:
+    def _ask_indicator(label: str, must_be_in_probe: Optional[bool]) -> str:
+        """
+        must_be_in_probe=True  -> girilen metin YUKARIDAKİ (bilinen YANLIŞ) yanıtta MUTLAKA olmalı (hata belirteci).
+        must_be_in_probe=False -> girilen metin YUKARIDAKİ yanıtta OLMAMALI (başarı belirteci, aksi çelişki olur).
+        must_be_in_probe=None  -> probe verisi yok (ör. ağ hatası olduysa), doğrulama yapılamaz.
+        """
         while True:
-            value = input(f"{Fore.CYAN}   {label} (boş bırakılamaz): {Style.RESET_ALL}").strip()
+            value = input(f"{Fore.CYAN}   {label}: {Style.RESET_ALL}").strip()
             if not value:
-                print_error("Boş belirteç girilirse tespit güvenilmez hale gelir (status koduna sessizce düşer). Lütfen bir metin girin.")
+                print_error("Boş bırakılamaz — bu tespiti güvenilmez hale getirir.")
                 continue
-            if value in ("1", "2", "3") and len(value) <= 2:
-                confirm_odd = input(
-                    f"{Fore.YELLOW}   '{value}' çok kısa/genel bir ifade — bu az önceki menü numarasını yanlışlıkla "
-                    f"yazmış olabilir misin? Gerçekten bu metni mi arayalım? [e/H]: {Style.RESET_ALL}"
-                ).strip().lower()
-                if confirm_odd not in ('e', 'evet', 'y', 'yes'):
-                    continue
+            if len(value.replace(" ", "")) < 4:
+                print_error(
+                    f"'{value}' çok kısa (en az 4 karakter gerekli). Tek harf/rakam gibi kısa ifadeler "
+                    f"her sayfada rastgele bulunabilir ve yanlış pozitif üretir. Örn: 'hatalı', 'Dashboard'."
+                )
+                continue
+            if must_be_in_probe is True and probe_text and value.lower() not in probe_text.lower():
+                print_error(
+                    f"'{value}' az önce gördüğün YANLIŞ parola yanıtında GEÇMİYOR. "
+                    f"Muhtemelen yanlış yazıldı — yukarıdaki yanıt önizlemesinden aynen kopyala."
+                )
+                continue
+            if must_be_in_probe is False and probe_text and value.lower() in probe_text.lower():
+                print_error(
+                    f"'{value}' az önce gördüğün YANLIŞ parola yanıtında ZATEN VAR. "
+                    f"Bu bir başarı belirteci olamaz, yoksa her deneme 'başarılı' sanılır. "
+                    f"Sadece doğru girişte göreceğin farklı bir ifade gir."
+                )
+                continue
             return value
 
     success_indicator = None
     failure_indicator = None
     if detect_choice == "1":
-        success_indicator = _ask_indicator("Başarı belirteci metni")
+        success_indicator = _ask_indicator("Başarı belirteci metni", must_be_in_probe=False)
     elif detect_choice == "2":
-        failure_indicator = _ask_indicator("Hata belirteci metni")
+        failure_indicator = _ask_indicator("Hata belirteci metni", must_be_in_probe=True)
 
     exclude_passwords = None
     exclude_in = input(
