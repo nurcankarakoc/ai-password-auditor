@@ -32,6 +32,9 @@ class HttpLoginAuditService:
         success_indicator: Optional[str] = None,
         failure_indicator: Optional[str] = None,
         success_status_codes: Optional[List[int]] = None,
+        auto_baseline_status: Optional[int] = None,
+        auto_baseline_word_count: Optional[int] = None,
+        auto_diff_threshold: float = 0.10,
         extra_fields: Optional[Dict[str, str]] = None,
         csrf_field: Optional[str] = None,
         csrf_regex: Optional[str] = None,
@@ -49,6 +52,13 @@ class HttpLoginAuditService:
         self.success_indicator = success_indicator
         self.failure_indicator = failure_indicator
         self.success_status_codes = success_status_codes or [200, 301, 302, 303]
+        # Otomatik mod: bilinen bir YANLIŞ parola yanıtına (baseline) göre kelime sayısı/status
+        # farkını ölçüp, belirgin şekilde farklı bir yanıtı "başarı" sayar (ffuf/wfuzz'daki
+        # response-size filtreleme mantığına benzer). success_indicator/failure_indicator
+        # verilmediyse ve baseline mevcutsa bu mod devreye girer.
+        self.auto_baseline_status = auto_baseline_status
+        self.auto_baseline_word_count = auto_baseline_word_count
+        self.auto_diff_threshold = auto_diff_threshold
         self.extra_fields = extra_fields or {}
         self.csrf_field = csrf_field
         self.csrf_regex = csrf_regex
@@ -80,6 +90,13 @@ class HttpLoginAuditService:
             return self.success_indicator.lower() in response_text.lower()
         if self.failure_indicator:
             return self.failure_indicator.lower() not in response_text.lower()
+        if self.auto_baseline_word_count is not None:
+            if status_code != self.auto_baseline_status:
+                return True
+            word_count = len(response_text.split())
+            baseline = max(self.auto_baseline_word_count, 1)
+            diff_ratio = abs(word_count - baseline) / baseline
+            return diff_ratio > self.auto_diff_threshold
         return status_code in self.success_status_codes
 
     def attempt_login(self, password: str) -> Tuple[int, str, bool]:
