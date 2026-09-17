@@ -1021,18 +1021,27 @@ def handle_online_login_audit() -> None:
     default_detect = "2" if probe_status in (200, 301, 302, 303) else "3"
     detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-3, ENTER={default_detect}]: {Style.RESET_ALL}").strip() or default_detect
 
+    def _ask_indicator(label: str) -> str:
+        while True:
+            value = input(f"{Fore.CYAN}   {label} (boş bırakılamaz): {Style.RESET_ALL}").strip()
+            if not value:
+                print_error("Boş belirteç girilirse tespit güvenilmez hale gelir (status koduna sessizce düşer). Lütfen bir metin girin.")
+                continue
+            if value in ("1", "2", "3") and len(value) <= 2:
+                confirm_odd = input(
+                    f"{Fore.YELLOW}   '{value}' çok kısa/genel bir ifade — bu az önceki menü numarasını yanlışlıkla "
+                    f"yazmış olabilir misin? Gerçekten bu metni mi arayalım? [e/H]: {Style.RESET_ALL}"
+                ).strip().lower()
+                if confirm_odd not in ('e', 'evet', 'y', 'yes'):
+                    continue
+            return value
+
     success_indicator = None
     failure_indicator = None
     if detect_choice == "1":
-        while not success_indicator:
-            success_indicator = input(f"{Fore.CYAN}   Başarı belirteci metni (boş bırakılamaz): {Style.RESET_ALL}").strip()
-            if not success_indicator:
-                print_error("Boş belirteç girilirse tespit güvenilmez hale gelir (status koduna sessizce düşer). Lütfen bir metin girin.")
+        success_indicator = _ask_indicator("Başarı belirteci metni")
     elif detect_choice == "2":
-        while not failure_indicator:
-            failure_indicator = input(f"{Fore.CYAN}   Hata belirteci metni (boş bırakılamaz): {Style.RESET_ALL}").strip()
-            if not failure_indicator:
-                print_error("Boş belirteç girilirse tespit güvenilmez hale gelir (status koduna sessizce düşer). Lütfen bir metin girin.")
+        failure_indicator = _ask_indicator("Hata belirteci metni")
 
     exclude_passwords = None
     exclude_in = input(
