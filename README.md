@@ -87,8 +87,9 @@ Ekrana Cybzenor ana operasyon menüsü gelecektir:
   [2] Yapay Zeka Hedefli Liste Üretimi (AI Targeted Wordlist)
   [3] Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)
   [4] Yerel Hash Denetim Motoru (Local Hash Audit Engine)
-  [5] Kıyaslama ve Performans Analizi (Benchmark Module)
-  [6] Çıkış (Exit)
+  [5] Canlı Login Ekranı Denetimi (Online Login Audit) [Sadece Yetkili Hedefler]
+  [6] Kıyaslama ve Performans Analizi (Benchmark Module)
+  [7] Çıkış (Exit)
 ```
 
 ---
