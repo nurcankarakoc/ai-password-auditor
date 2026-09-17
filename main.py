@@ -1009,14 +1009,21 @@ def handle_online_login_audit() -> None:
         print_info("Yine de devam edebilirsin, ama aşağıdaki seçimi yukarıdaki yanıt olmadan tahmine dayalı yapman gerekecek.")
 
     risky_status = probe_status in (200, 301, 302, 303)
-    default_detect = "2" if risky_status else "3"
+    auto_available = bool(probe_text) and probe_status is not None
+    default_detect = "1" if auto_available else ("3" if risky_status else "4")
 
     print(f"\n{Fore.CYAN}10. Başarı Nasıl Tespit Edilsin?{Style.RESET_ALL}")
-    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Doğru girişte görünen bir ifadeyi ara (başarı belirteci)")
-    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yukarıda gördüğün hata mesajını ara — yokluğu başarı sayılır (hata belirteci)")
+    auto_note = "" if auto_available else f" {Fore.RED}[probe başarısız oldu, kullanılamaz]{Style.RESET_ALL}"
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} {Style.BRIGHT}OTOMATİK (Önerilen){Style.RESET_ALL} — sistem her yanıtı yukarıdaki yanlış-parola yanıtıyla karşılaştırır,{auto_note}")
+    print(f"      belirgin şekilde farklıysa (kelime sayısı/status kodu) başarı sayar. Bir şey yazmana gerek yok.")
+    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Doğru girişte görünen bir ifadeyi ara (başarı belirteci) — ileri seviye")
+    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Yukarıda gördüğün hata mesajını ara — yokluğu başarı sayılır (hata belirteci) — ileri seviye")
     status_note = f" {Fore.RED}[bu site için önerilmez, yukarıya bak]{Style.RESET_ALL}" if risky_status else ""
-    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı){status_note}")
-    detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-3, ENTER={default_detect}]: {Style.RESET_ALL}").strip() or default_detect
+    print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı){status_note}")
+    detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-4, ENTER={default_detect}]: {Style.RESET_ALL}").strip() or default_detect
+    if detect_choice == "1" and not auto_available:
+        print_error("Otomatik mod probe verisi olmadan çalışamaz. Lütfen 2, 3 veya 4 seçin.")
+        detect_choice = input(f"{Fore.GREEN}Seçiminiz [2-4]: {Style.RESET_ALL}").strip() or "4"
 
     def _ask_indicator(label: str, must_be_in_probe: Optional[bool]) -> str:
         """
@@ -1052,9 +1059,10 @@ def handle_online_login_audit() -> None:
 
     success_indicator = None
     failure_indicator = None
-    if detect_choice == "1":
+    use_auto_detect = detect_choice == "1"
+    if detect_choice == "2":
         success_indicator = _ask_indicator("Başarı belirteci metni", must_be_in_probe=False)
-    elif detect_choice == "2":
+    elif detect_choice == "3":
         failure_indicator = _ask_indicator("Hata belirteci metni", must_be_in_probe=True)
 
     exclude_passwords = None
@@ -1085,6 +1093,7 @@ def handle_online_login_audit() -> None:
     print(f" • Wordlist         : {chosen_wl.name}")
     if exclude_passwords:
         print(f" • Hariç Tutulanlar : {', '.join(exclude_passwords)}")
+    print(f" • Başarı Tespiti   : {'Otomatik (yanıt farkı)' if use_auto_detect else ('Belirteç: ' + (success_indicator or failure_indicator or 'status kodu'))}")
     print(f" • Güvenlik Eşiği   : {max_consecutive_failures} ardışık başarısızlık")
     final_confirm = input(f"\n{Fore.YELLOW}Denetim başlatılsın mı? [E/h]: {Style.RESET_ALL}").strip().lower()
     if final_confirm not in ('e', 'evet', 'y', 'yes'):
@@ -1102,6 +1111,8 @@ def handle_online_login_audit() -> None:
             content_type=content_type,
             success_indicator=success_indicator,
             failure_indicator=failure_indicator,
+            auto_baseline_status=probe_status if use_auto_detect else None,
+            auto_baseline_word_count=len(probe_text.split()) if use_auto_detect else None,
             csrf_field=csrf_field,
             csrf_regex=csrf_regex,
             request_delay_ms=request_delay_ms,
