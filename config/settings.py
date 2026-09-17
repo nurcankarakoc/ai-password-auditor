@@ -44,6 +44,8 @@ class SafetyConfig(BaseModel):
     max_consecutive_failures: int = Field(default=50, ge=1, le=1000, description="Maksimum ardışık başarısız deneme")
     abort_on_rate_limit: bool = Field(default=True, description="HTTP 429 veya kilitlenmede derhal durdur")
     mock_audit_delay_ms: int = Field(default=10, ge=0, le=5000, description="Test motoru simülasyon gecikmesi (ms)")
+    online_request_delay_ms: int = Field(default=250, ge=0, le=60_000, description="Canlı login denetiminde istekler arası bekleme (ms)")
+    online_request_timeout_seconds: int = Field(default=10, ge=1, le=120, description="Canlı login denetiminde HTTP istek zaman aşımı (sn)")
 
 
 class AppSettings(BaseModel):

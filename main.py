@@ -51,8 +51,9 @@ def display_menu() -> None:
     print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yapay Zeka Hedefli Liste Üretimi (AI Targeted Wordlist)")
     print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)")
     print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Yerel Hash Denetim Motoru (Local Hash Audit Engine)")
-    print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Kıyaslama ve Performans Analizi (Benchmark Module)")
-    print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Çıkış (Exit)\n")
+    print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Canlı Login Ekranı Denetimi (Online Login Audit) {Fore.RED}[Sadece Yetkili Hedefler]{Style.RESET_ALL}")
+    print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Kıyaslama ve Performans Analizi (Benchmark Module)")
+    print(f" {Fore.CYAN}[7]{Style.RESET_ALL} Çıkış (Exit)\n")
     print(f"{Fore.LIGHTBLACK_EX} ⚡ Siber Komutlar: 'targets', 'use <hedef>', 'view 10', 'info', 'search <kelime>', 'help'{Style.RESET_ALL}\n")
 
 
@@ -844,6 +845,7 @@ from core.safety_controller import (
     SafetyTriggerReason
 )
 from core.benchmark import BenchmarkSuite
+from core.online_login_auditor import HttpLoginAuditService
 
 
 def handle_safety_controller_audit() -> None:
@@ -918,6 +920,135 @@ def handle_safety_controller_audit() -> None:
         print(f" • Geçen Süre         : {report['elapsed_seconds']} sn")
     else:
         print_info(f"Test tamamlandı: {report['status']}")
+
+    pause_prompt()
+
+
+def handle_online_login_audit() -> None:
+    """[5] Canlı Login Ekranı Denetimi: gerçek bir HTTP login formuna karşı SafetyController gözetiminde parola denemesi yapar."""
+    clear_screen()
+    print_banner(version=settings.version)
+    print_header("[5] CANLI LOGIN EKRANI DENETİMİ (Online Login Audit)")
+
+    print(f"{Fore.RED}{Style.BRIGHT}[!] YASAL UYARI:{Style.RESET_ALL}")
+    print(f"{Fore.RED}Bu özellik GERÇEK bir sisteme ağ üzerinden istek gönderir.{Style.RESET_ALL}")
+    print(f"{Fore.RED}Sadece kendi sisteminizde veya yazılı izinle yetkilendirildiğiniz hedeflerde kullanınız.{Style.RESET_ALL}")
+    print(f"{Fore.RED}Yetkisiz kullanım suçtur ve tüm sorumluluk kullanıcıya aittir.{Style.RESET_ALL}\n")
+
+    confirm = input(f"{Fore.YELLOW}Bu hedefte test yapma yetkiniz olduğunu onaylıyor musunuz? [E/h]: {Style.RESET_ALL}").strip().lower()
+    if confirm not in ('e', 'evet', 'y', 'yes'):
+        print_info("İşlem kullanıcı tarafından iptal edildi.")
+        pause_prompt()
+        return
+
+    print_header("HEDEF LOGIN FORMU YAPILANDIRMASI")
+
+    target_url = input(f"{Fore.CYAN}1. Hedef Login URL'si (örn: http://localhost:8080/login): {Style.RESET_ALL}").strip()
+    if not target_url:
+        print_error("Hedef URL boş olamaz!")
+        pause_prompt()
+        return
+
+    method_in = input(f"{Fore.CYAN}2. HTTP Metodu [ENTER = POST]: {Style.RESET_ALL}").strip().upper()
+    method = method_in if method_in in ("POST", "GET") else "POST"
+
+    content_type = "form"
+    if method == "POST":
+        ct_in = input(f"{Fore.CYAN}3. İçerik Tipi - form ya da json [ENTER = form]: {Style.RESET_ALL}").strip().lower()
+        content_type = "json" if ct_in == "json" else "form"
+
+    username_field = input(f"{Fore.CYAN}4. Kullanıcı Adı Alan İsmi [ENTER = username]: {Style.RESET_ALL}").strip() or "username"
+    username_value = input(f"{Fore.CYAN}5. Denenecek Kullanıcı Adı: {Style.RESET_ALL}").strip()
+    if not username_value:
+        print_error("Kullanıcı adı boş olamaz!")
+        pause_prompt()
+        return
+    password_field = input(f"{Fore.CYAN}6. Parola Alan İsmi [ENTER = password]: {Style.RESET_ALL}").strip() or "password"
+
+    print(f"\n{Fore.CYAN}7. Başarı Nasıl Tespit Edilsin?{Style.RESET_ALL}")
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Yanıt metninde bir BAŞARI belirteci ara (örn: 'Hoş geldiniz', 'Dashboard')")
+    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yanıt metninde bir HATA belirteci ara (yokluğu = başarı) (örn: 'Hatalı parola', 'Invalid')")
+    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı)")
+    detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-3, ENTER=3]: {Style.RESET_ALL}").strip()
+
+    success_indicator = None
+    failure_indicator = None
+    if detect_choice == "1":
+        success_indicator = input(f"{Fore.CYAN}   Başarı belirteci metni: {Style.RESET_ALL}").strip()
+    elif detect_choice == "2":
+        failure_indicator = input(f"{Fore.CYAN}   Hata belirteci metni: {Style.RESET_ALL}").strip()
+
+    csrf_field = None
+    csrf_regex = None
+    csrf_in = input(f"\n{Fore.CYAN}8. Form bir CSRF token gerektiriyor mu? [e/H]: {Style.RESET_ALL}").strip().lower()
+    if csrf_in in ('e', 'evet', 'y', 'yes'):
+        csrf_field = input(f"{Fore.CYAN}   CSRF alan ismi (örn: csrf_token): {Style.RESET_ALL}").strip() or None
+        csrf_regex = input(f"{Fore.CYAN}   Token'ı yakalayacak regex (1 grup, örn: name=\"csrf_token\" value=\"(.*?)\"): {Style.RESET_ALL}").strip() or None
+
+    delay_in = input(f"\n{Fore.CYAN}9. İstekler arası bekleme (ms) [ENTER = {settings.safety.online_request_delay_ms}]: {Style.RESET_ALL}").strip()
+    request_delay_ms = int(delay_in) if delay_in.isdigit() else None
+
+    # Wordlist seçimi (aynı seçici Hash Denetim Motoru ile paylaşılıyor)
+    chosen_wl = _select_audit_wordlist()
+    if chosen_wl is None:
+        pause_prompt()
+        return
+
+    print_header("DENETİM ÖZETİ")
+    print(f" • Hedef URL        : {target_url}")
+    print(f" • Metod            : {method} ({content_type})")
+    print(f" • Kullanıcı Adı    : {username_value}")
+    print(f" • Wordlist         : {chosen_wl.name}")
+    print(f" • Güvenlik Eşiği   : {settings.safety.max_consecutive_failures} ardışık başarısızlık")
+    final_confirm = input(f"\n{Fore.YELLOW}Denetim başlatılsın mı? [E/h]: {Style.RESET_ALL}").strip().lower()
+    if final_confirm not in ('e', 'evet', 'y', 'yes'):
+        print_info("İşlem kullanıcı tarafından iptal edildi.")
+        pause_prompt()
+        return
+
+    try:
+        service = HttpLoginAuditService(
+            target_url=target_url,
+            username_field=username_field,
+            username_value=username_value,
+            password_field=password_field,
+            method=method,
+            content_type=content_type,
+            success_indicator=success_indicator,
+            failure_indicator=failure_indicator,
+            csrf_field=csrf_field,
+            csrf_regex=csrf_regex,
+            request_delay_ms=request_delay_ms,
+        )
+
+        print_info("Canlı denetim başlatılıyor (SafetyController gözetiminde)...")
+        report = run_safety_monitored_audit(
+            wordlist_path=chosen_wl,
+            mock_service=service,
+            safety_controller=SafetyController()
+        )
+
+        print_header("CANLI LOGIN DENETİM SONUÇ RAPORU")
+        if report["status"] == "MATCH_FOUND":
+            print_success("PAROLA BAŞARIYLA TESPİT EDİLDİ (MATCH)!")
+            print(f" • Açık Parola       : {Fore.YELLOW}{Style.BRIGHT}{report['matched_password']}{Style.RESET_ALL}")
+            print(f" • Deneme Sayısı     : {report['attempts_made']:,}")
+            print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+        elif report["status"].startswith("SAFETY_HALTED"):
+            print_warning("TEST GÜVENLİK PROTOKOLÜ GEREĞİ DURDURULDU:")
+            print(f" • Durum             : {report['status']}")
+            print(f" • Açıklama          : {report['error_message']}")
+            print(f" • Yapılan Deneme    : {report['attempts_made']:,}")
+            print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+            print_success("Güvenlik Denetleyicisi etik sınırları koruyarak hedefi koruma altına aldı.")
+        else:
+            print_error("EŞLEŞME BULUNAMADI!")
+            print(f" • Deneme Sayısı     : {report['attempts_made']:,}")
+            print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+
+    except Exception as e:
+        logger.exception(f"Canlı login denetimi hatası: {e}")
+        print_error(f"Denetim sırasında hata oluştu: {e}")
 
     pause_prompt()
 
@@ -1104,7 +1235,7 @@ def main() -> None:
             display_menu()
 
             active_target = get_active_target()
-            prompt_label = f"cybzenor ({Fore.CYAN}{active_target}{Fore.GREEN}) > " if active_target else "cybzenor [1-6 veya komut]: "
+            prompt_label = f"cybzenor ({Fore.CYAN}{active_target}{Fore.GREEN}) > " if active_target else "cybzenor [1-7 veya komut]: "
             choice = input(f"{Fore.GREEN}{Style.BRIGHT}{prompt_label}{Style.RESET_ALL}").strip()
 
             if not choice:
@@ -1123,11 +1254,13 @@ def main() -> None:
             elif choice == "4":
                 handle_local_hash_audit_engine()
             elif choice == "5":
-                handle_benchmark_module()
+                handle_online_login_audit()
             elif choice == "6":
+                handle_benchmark_module()
+            elif choice == "7":
                 exit_application()
             else:
-                print_error("Geçersiz seçim! Lütfen 1 ile 6 arasında bir rakam girin veya bir komut yazın (örn: 'view 10', 'list').")
+                print_error("Geçersiz seçim! Lütfen 1 ile 7 arasında bir rakam girin veya bir komut yazın (örn: 'view 10', 'list').")
                 pause_prompt()
 
         except KeyboardInterrupt:

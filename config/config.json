@@ -20,6 +20,8 @@
   "safety": {
     "max_consecutive_failures": 50,
     "abort_on_rate_limit": true,
-    "mock_audit_delay_ms": 10
+    "mock_audit_delay_ms": 10,
+    "online_request_delay_ms": 250,
+    "online_request_timeout_seconds": 10
   }
 }
