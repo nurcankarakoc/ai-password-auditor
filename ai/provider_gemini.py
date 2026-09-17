@@ -24,7 +24,7 @@ def _normalize_tr(text: str) -> str:
 class GeminiAIProvider(BaseAIProvider):
     """Google Gemini modellerini kullanarak OSINT verisini yapılandıran sağlayıcı."""
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash") -> None:
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-flash-latest") -> None:
         key = api_key or settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
         super().__init__(api_key=key)
         self.model_name = model_name
@@ -61,6 +61,10 @@ class GeminiAIProvider(BaseAIProvider):
 
         return fallback_fn()
 
+    def _has_real_ai(self) -> bool:
+        """Gemini API veya yerel dil modelinden en az biri gerçekten kullanılabilir mi?"""
+        return self.is_available() or local_llm_engine.is_available()
+
     def extract_target_profile(self, raw_text: str) -> TargetProfile:
         """
         Girdiyi analiz eder. API erişilebilir ise Gemini Structured Output kullanır.
@@ -76,8 +80,13 @@ class GeminiAIProvider(BaseAIProvider):
             label="profil çıkarımı"
         )
 
-        profile = self._enrich_with_unknown_category_guesses(raw_text, profile)
-        profile = self._enrich_with_interest_associations(profile)
+        # Kategori tahmini (evcil hayvan/çocuk/lakap ismi) ve ilgi alanı çağrışımı (kahve->latte)
+        # sadece gerçek bir AI (Gemini veya yerel model) varken yapılır. Statik sözlükler küçük
+        # ve genellenemez olduğu için AI'sız modda alakasız/Türkçe'ye uygun olmayan kelimeler
+        # üretebiliyordu; AI yoksa sadece kullanıcının bizzat girdiği kelimeler kullanılır.
+        if self._has_real_ai():
+            profile = self._enrich_with_unknown_category_guesses(raw_text, profile)
+            profile = self._enrich_with_interest_associations(profile)
         return profile
 
     # Takım/kulüp anahtar kelimeleri: bunlar zaten ranking_engine/candidate_generator'daki
@@ -505,14 +514,18 @@ class GeminiAIProvider(BaseAIProvider):
         """Yerel küçük dil modeliyle serbest metinden yapılandırılmış profil çıkarır."""
         system = "Sen bir OSINT analistisin. Sadece istenen JSON formatında yanıt ver, başka açıklama ekleme."
         user = (
-            "Aşağıdaki metinden bir kişi hakkındaki bilgileri çıkar ve TAM OLARAK şu JSON şemasıyla döndür:\n"
+            "Örnek girdi: \"Ahmet Fenerbahçeli, 1993 doğumlu, İstanbul'da yaşıyor, köpeğinin adı Pamuk.\"\n"
+            "Örnek çıktı: {\"names\": [\"Ahmet\", \"Pamuk\"], \"dates\": [\"1993\"], \"locations\": [\"Istanbul\"], "
+            "\"interests\": [\"fenerbahce\"], \"relations\": [], \"keywords\": []}\n\n"
+            "YUKARIDAKİ ÖRNEĞİ KOPYALAMADAN, şimdi gerçek metinden bir kişi hakkındaki bilgileri çıkar ve "
+            "TAM OLARAK aynı JSON şemasıyla döndür:\n"
             '{"names": [], "dates": [], "locations": [], "interests": [], "relations": [["isim1","isim2"]], "keywords": []}\n'
-            "- names: kişi, eş, çocuk, evcil hayvan isimleri (Türkçe karakterleri koru)\n"
+            "- names: SADECE gerçek özel isimler (kişi, eş, çocuk, evcil hayvan) — genel kelimeleri (örn: 'kahve') isim sayma\n"
             "- dates: 4 haneli yıllar\n"
             "- locations: şehir/plaka\n"
-            "- interests: hobi, takım, yiyecek/içecek merakı, kişilik özellikleri\n"
+            "- interests: hobi, takım, yiyecek/içecek merakı, kişilik özellikleri (tek kelime/kısa ifade)\n"
             "- keywords: lakap, özel kelimeler\n\n"
-            f"Metin: \"\"\"{raw_text}\"\"\""
+            f"Gerçek metin: \"\"\"{raw_text}\"\"\""
         )
         data = local_llm_engine.generate_json(system, user, max_tokens=600)
         if isinstance(data, dict):
