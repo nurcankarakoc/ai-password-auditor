@@ -37,7 +37,7 @@ class TestConfigValidation:
         """Geçerli özel yapılandırma oluşturulabilmeli."""
         custom = AppSettings(
             log_level="DEBUG",
-            wordlist=WordlistConfig(min_length=8, max_length=16, max_candidates=1000)
+            wordlist=WordlistConfig(min_length=8, max_length=16, min_candidates=500, max_candidates=1000)
         )
         assert custom.log_level == "DEBUG"
         assert custom.wordlist.min_length == 8
