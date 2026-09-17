@@ -176,7 +176,12 @@ Yeni başlayanların en sık sorduğu soru: *"Neden direkt şifreyi yazıp aram�
 > Çözüm: `cd ~/ai-password-auditor` yazarak proje klasörünün içine girip öyle `git pull` yapın.
 
 ### S: Gemini API Anahtarı (API Key) almak zorunda mıyım?
-> **Cevap:** Hayır, kesinlikle zorunlu değildir. API anahtarı girmediğinizde Cybzenor dahili **Offline Regex NLP ve Heuristic Motoru**nu kullanır. Bu motor internete ihtiyaç duymadan hedefin takımları, isimleri ve ilişkilerini yüksek doğrulukla ayrıştırır.
+> **Cevap:** Hayır, zorunlu değil, ama **şiddetle önerilir** — ücretsiz ve 1 dakika sürer. Cybzenor 3 katmanlı bir AI zinciri kullanır:
+> 1. **Gemini API** (anahtar girildiyse) — en akıllı/en doğru sonuç. **Önerilen yol budur.**
+> 2. **Yerel Küçük Dil Modeli** (isteğe bağlı, `python setup_local_ai.py` ile ~1GB indirilir) — API anahtarı olmadan tamamen offline çalışır, ancak küçük model boyutu nedeniyle çıktı kalitesi Gemini'nin gerisindedir; deneysel bir seçenek olarak düşünün.
+> 3. **Statik Kural/Regex Motoru** — hiçbiri kurulu değilse devreye girer, yine de hedefin takımları/isimleri/ilişkilerini makul doğrulukla ayrıştırır.
+>
+> **Kendi API anahtarınızı eklemek için:** [aistudio.google.com/apikey](https://aistudio.google.com/apikey) adresinden ücretsiz bir anahtar alın, sonra Cybzenor'da herhangi bir yerde `apikey` yazıp yapıştırın — anahtar `.env` dosyasına kaydedilir (asla GitHub'a gitmez, `.gitignore`'da tanımlıdır) ve bir daha girmenize gerek kalmaz.
 
 ### S: Ürettiğim wordlist'ler ve hedef bilgileri GitHub'a yüklenir mi?
 > **Cevap:** Hayır. `.gitignore` dosyamızda `wordlists/generated/` ve `logs/` tanımlıdır. Ürettiğiniz hiçbir özel liste veya hedef verisi asla GitHub'a gitmez; yalnızca sizin bilgisayarınızda yerel olarak kalır.

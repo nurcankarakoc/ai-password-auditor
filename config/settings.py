@@ -74,11 +74,35 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 CONFIG_FILE_PATH: Path = BASE_DIR / "config" / "config.json"
 
 
+def _load_dotenv_file(env_path: Path) -> None:
+    """
+    .env dosyasındaki KEY=VALUE satırlarını, zaten ortamda tanımlı olmayan
+    değişkenler için os.environ'a yükler (harici bağımlılık gerektirmeyen minimal yükleyici).
+    """
+    if not env_path.is_file():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception:
+        pass
+
+
 def load_settings(config_path: Optional[Path] = None) -> AppSettings:
     """
-    Konfigürasyon dosyasını (config.json) ve ortam değişkenlerini yükler.
+    .env dosyasını, konfigürasyon dosyasını (config.json) ve ortam değişkenlerini yükler.
     Dosya bulunamazsa varsayılan güvenli ayarlarla AppSettings nesnesi üretir.
     """
+    _load_dotenv_file(BASE_DIR / ".env")
+
     target_path = config_path or CONFIG_FILE_PATH
     data = {}
 
@@ -100,6 +124,29 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
         data["log_level"] = env_log_level
 
     return AppSettings(**data)
+
+
+ENV_FILE_PATH: Path = BASE_DIR / ".env"
+
+
+def save_gemini_api_key(api_key: str) -> None:
+    """
+    Gemini API anahtarını .env dosyasına kalıcı olarak yazar (config.json GİBİ git'e
+    eklenen bir dosyaya DEĞİL — .env .gitignore'da tanımlıdır, böylece anahtar asla
+    yanlışlıkla commit edilmez) ve çalışan süreçteki global `settings` nesnesini günceller.
+    """
+    lines = []
+    if ENV_FILE_PATH.is_file():
+        with open(ENV_FILE_PATH, "r", encoding="utf-8") as f:
+            lines = [line.rstrip("\n") for line in f if not line.strip().startswith("GEMINI_API_KEY=")]
+
+    lines.append(f"GEMINI_API_KEY={api_key}")
+
+    with open(ENV_FILE_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    os.environ["GEMINI_API_KEY"] = api_key
+    settings.gemini_api_key = api_key
 
 
 # Singleton benzeri global settings nesnesi

@@ -41,6 +41,11 @@ def display_system_status() -> None:
     print(f" • Maksimum Aday Limiti   : {settings.wordlist.max_candidates:,}")
     print(f" • Log Seviyesi / Maskele : {settings.log_level} / {'Aktif' if settings.mask_sensitive_data else 'Pasif'}")
     print(f" • Güvenlik Hata Eşiği    : {settings.safety.max_consecutive_failures} ardışık deneme")
+    if settings.gemini_api_key:
+        ai_status = f"{Fore.GREEN}Gemini API Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    else:
+        ai_status = f"{Fore.YELLOW}Offline Motor (API key yok — 'apikey' yazarak ekleyebilirsiniz){Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    print(f" • AI Motoru              : {ai_status}")
     print(f"---------------------------------{Style.RESET_ALL}\n")
 
 
@@ -54,7 +59,7 @@ def display_menu() -> None:
     print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Canlı Login Ekranı Denetimi (Online Login Audit) {Fore.RED}[Sadece Yetkili Hedefler]{Style.RESET_ALL}")
     print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Kıyaslama ve Performans Analizi (Benchmark Module)")
     print(f" {Fore.CYAN}[7]{Style.RESET_ALL} Çıkış (Exit)\n")
-    print(f"{Fore.LIGHTBLACK_EX} ⚡ Siber Komutlar: 'targets', 'use <hedef>', 'view 10', 'info', 'search <kelime>', 'help'{Style.RESET_ALL}\n")
+    print(f"{Fore.LIGHTBLACK_EX} ⚡ Siber Komutlar: 'targets', 'use <hedef>', 'view 10', 'info', 'search <kelime>', 'apikey', 'help'{Style.RESET_ALL}\n")
 
 
 def handle_default_wordlist_operations() -> None:
@@ -440,6 +445,7 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     print(f"Metni yazdıktan sonra ENTER tuşuna basınız (yazmak istemiyorsanız doğrudan ENTER ile geçiniz):{Style.RESET_ALL}")
     free_text = input(f"{Fore.GREEN}   > Ek Notlar / Metin: {Style.RESET_ALL}").strip()
 
+    association_words: List[str] = []
     if free_text:
         print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         provider = GeminiAIProvider()
@@ -450,6 +456,7 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
         locations = sorted(list(set(locations + parsed_extra.locations)))
         interests = sorted(list(set(interests + parsed_extra.interests)))
         keywords = sorted(list(set(keywords + parsed_extra.keywords)))
+        association_words = parsed_extra.association_words
 
     # İlişki çiftleri oluştur
     relations = []
@@ -462,7 +469,8 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
         locations=locations,
         interests=interests,
         relations=relations,
-        keywords=keywords
+        keywords=keywords,
+        association_words=association_words
     )
 
     if profile.is_empty():
@@ -476,6 +484,8 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     print(f" • İlgi Alanları  : {', '.join(profile.interests) if profile.interests else 'Yok'}")
     print(f" • İlişkiler      : {profile.relations if profile.relations else 'Yok'}")
     print(f" • Anahtar Kelime : {', '.join(profile.keywords) if profile.keywords else 'Yok'}")
+    if profile.association_words:
+        print(f" • Çağrışım Kelime: {', '.join(profile.association_words)} {Fore.LIGHTBLACK_EX}(tek başına/tarih+ek ile kullanılır, isimle birleştirilmez){Style.RESET_ALL}")
 
     return profile
 

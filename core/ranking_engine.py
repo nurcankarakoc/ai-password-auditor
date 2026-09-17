@@ -50,6 +50,12 @@ class RankingEngine:
         from ai.provider_gemini import GeminiAIProvider
         provider = GeminiAIProvider()
         self.semantic_roots = provider.generate_semantic_password_roots(profile)
+
+        # İlgi alanı/kişilik çağrışım kelimeleri (örn: kahve -> latte) de kök gibi işlenir:
+        # isimle birleştirilmez, tek başına veya tarih/ek ile kullanılır (Tier 0 mantığı).
+        if profile.association_words:
+            self.semantic_roots = list(dict.fromkeys(self.semantic_roots + profile.association_words))
+
         self.semantic_roots_lower = {r.lower() for r in self.semantic_roots}
 
     def calculate_score(self, candidate: str) -> int:
