@@ -1024,9 +1024,24 @@ def handle_online_login_audit() -> None:
     success_indicator = None
     failure_indicator = None
     if detect_choice == "1":
-        success_indicator = input(f"{Fore.CYAN}   Başarı belirteci metni: {Style.RESET_ALL}").strip()
+        while not success_indicator:
+            success_indicator = input(f"{Fore.CYAN}   Başarı belirteci metni (boş bırakılamaz): {Style.RESET_ALL}").strip()
+            if not success_indicator:
+                print_error("Boş belirteç girilirse tespit güvenilmez hale gelir (status koduna sessizce düşer). Lütfen bir metin girin.")
     elif detect_choice == "2":
-        failure_indicator = input(f"{Fore.CYAN}   Hata belirteci metni: {Style.RESET_ALL}").strip()
+        while not failure_indicator:
+            failure_indicator = input(f"{Fore.CYAN}   Hata belirteci metni (boş bırakılamaz): {Style.RESET_ALL}").strip()
+            if not failure_indicator:
+                print_error("Boş belirteç girilirse tespit güvenilmez hale gelir (status koduna sessizce düşer). Lütfen bir metin girin.")
+
+    exclude_passwords = None
+    exclude_in = input(
+        f"\n{Fore.CYAN}11. Bilinen ama artık GEÇERSİZ olan (yanlış pozitife sebep olabilecek) bir parola var mı? "
+        f"Varsa virgülle ayırarak yazın [ENTER = yok]: {Style.RESET_ALL}"
+    ).strip()
+    if exclude_in:
+        exclude_passwords = {p.strip() for p in exclude_in.split(",") if p.strip()}
+        print_info(f"Şu parolalar denemeden hariç tutulacak: {', '.join(exclude_passwords)}")
 
     # Wordlist seçimi (aynı seçici Hash Denetim Motoru ile paylaşılıyor)
     chosen_wl = _select_audit_wordlist()
@@ -1039,6 +1054,8 @@ def handle_online_login_audit() -> None:
     print(f" • Metod            : {method} ({content_type})")
     print(f" • Kullanıcı Adı    : {username_value}")
     print(f" • Wordlist         : {chosen_wl.name}")
+    if exclude_passwords:
+        print(f" • Hariç Tutulanlar : {', '.join(exclude_passwords)}")
     print(f" • Güvenlik Eşiği   : {settings.safety.max_consecutive_failures} ardışık başarısızlık")
     final_confirm = input(f"\n{Fore.YELLOW}Denetim başlatılsın mı? [E/h]: {Style.RESET_ALL}").strip().lower()
     if final_confirm not in ('e', 'evet', 'y', 'yes'):
@@ -1065,7 +1082,8 @@ def handle_online_login_audit() -> None:
         report = run_safety_monitored_audit(
             wordlist_path=chosen_wl,
             mock_service=service,
-            safety_controller=SafetyController()
+            safety_controller=SafetyController(),
+            exclude_passwords=exclude_passwords
         )
 
         print_header("CANLI LOGIN DENETİM SONUÇ RAPORU")
