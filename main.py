@@ -224,10 +224,7 @@ def handle_default_wordlist_operations() -> None:
 
                 # 5. Dosya adı
                 default_out_name = f"{source_file.stem}_cleaned_min{min_val}_max{max_val}.txt"
-                custom_cl = input(f"\n{Fore.CYAN}5. Kaydedilecek Dosya Adı [ENTER = {default_out_name}]: {Style.RESET_ALL}").strip()
-                out_name = custom_cl if custom_cl else default_out_name
-                if not out_name.lower().endswith(".txt"):
-                    out_name += ".txt"
+                out_name = _ask_wordlist_filename(default_out_name, prompt_label="5. Kaydedilecek Dosya Adı")
                 output_file = wordlist_manager.generated_dir / out_name
 
                 print_info(f"Filtreleme başlatılıyor (Min: {min_val}, Max: {max_val}, Kural: {char_rule})...")
@@ -433,6 +430,10 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     # 5. Özel Kelimeler / Renk / Lakap
     print(f"\n{Fore.CYAN}5. Özel Kelimeler, Sevdiği Renk veya Lakap:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: mor, mavi, yazılımcı, kartal{Style.RESET_ALL}")
+    from ai.local_llm_engine import local_llm_engine as _local_llm_check
+    if not settings.gemini_api_key and not _local_llm_check.is_available():
+        print(f"{Fore.YELLOW}   Not: AI aktif değil (bkz. 'apikey' komutu) — sistem kelime TAHMİN ETMEYECEK,")
+        print(f"   sadece burada bizzat yazdığınız kelimeleri kullanacak. Aklınıza gelen her şeyi girin.{Style.RESET_ALL}")
     kw_input = input(f"{Fore.GREEN}   > Özel Kelimeler: {Style.RESET_ALL}").strip()
     keywords = [k.strip().capitalize() for k in re.split(r'[,/&+\s]+', kw_input) if k.strip()] if kw_input else []
 
@@ -574,6 +575,32 @@ def save_target_profile_to_disk(profile: TargetProfile) -> Optional[Path]:
     return slug_file
 
 
+_REFLEX_ANSWER_TOKENS = {"e", "h", "evet", "hayir", "hayır", "y", "n", "yes", "no", "1", "2", "3"}
+
+
+def _ask_wordlist_filename(default_filename: str, prompt_label: str = "Kaydedilecek Wordlist dosya adı") -> str:
+    """
+    Dosya adını sorar; boş bırakılırsa varsayılanı kullanır. Kullanıcının başka bir soruya
+    verilecek refleks bir cevabı (örn. 'e', 'h', '1') yanlışlıkla dosya adı olarak yazdığından
+    şüphelenilirse ('e.txt' gibi anlamsız dosyalar oluşmasını önlemek için) onay ister.
+    """
+    while True:
+        custom_name = input(f"{Fore.CYAN}{prompt_label} [ENTER = {default_filename}]: {Style.RESET_ALL}").strip()
+        if not custom_name:
+            return default_filename
+
+        if custom_name.lower() in _REFLEX_ANSWER_TOKENS:
+            confirm = input(
+                f"{Fore.YELLOW}'{custom_name}' çok kısa/alışılmadık bir dosya adı — bu az önceki bir soruya "
+                f"verilecek cevabı yanlışlıkla buraya yazmış olabilir misiniz? Gerçekten bu ismi mi kullanalım? "
+                f"[e/H]: {Style.RESET_ALL}"
+            ).strip().lower()
+            if confirm not in ('e', 'evet', 'y', 'yes'):
+                continue
+
+        return custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
+
+
 def handle_targeted_wordlist_generation() -> None:
     """[2] AI Targeted Wordlist Generation operasyonu."""
     clear_screen()
@@ -595,11 +622,7 @@ def handle_targeted_wordlist_generation() -> None:
 
     print_header("KAYIT VE DOSYA ADI YAPILANDIRMASI")
     print(f"{Fore.LIGHTBLACK_EX}Üretilen liste 'wordlists/generated/' dizinine kaydedilecektir.{Style.RESET_ALL}")
-    custom_name = input(f"{Fore.CYAN}Kaydedilecek Wordlist dosya adı [ENTER = {default_filename}]: {Style.RESET_ALL}").strip()
-    if custom_name:
-        chosen_filename = custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
-    else:
-        chosen_filename = default_filename
+    chosen_filename = _ask_wordlist_filename(default_filename)
 
     confirm = input(f"\n{Fore.YELLOW}'{chosen_filename}' adıyla parola listesi üretilsin mi? [E/h]: {Style.RESET_ALL}").strip().lower()
     if confirm in ('h', 'hayir', 'n', 'no'):
@@ -670,11 +693,7 @@ def handle_hybrid_wordlist_generation() -> None:
 
     print_header("KAYIT VE DOSYA ADI YAPILANDIRMASI")
     print(f"{Fore.LIGHTBLACK_EX}Üretilen hibrit liste 'wordlists/generated/' dizinine kaydedilecektir.{Style.RESET_ALL}")
-    custom_name = input(f"{Fore.CYAN}Kaydedilecek Hibrit Wordlist dosya adı [ENTER = {default_filename}]: {Style.RESET_ALL}").strip()
-    if custom_name:
-        chosen_filename = custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
-    else:
-        chosen_filename = default_filename
+    chosen_filename = _ask_wordlist_filename(default_filename, prompt_label="Kaydedilecek Hibrit Wordlist dosya adı")
     output_file = wordlist_manager.generated_dir / chosen_filename
 
     try:
