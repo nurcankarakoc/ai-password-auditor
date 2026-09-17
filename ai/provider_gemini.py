@@ -43,13 +43,95 @@ class GeminiAIProvider(BaseAIProvider):
 
         if self.is_available():
             try:
-                return self._extract_via_gemini(raw_text)
+                profile = self._extract_via_gemini(raw_text)
             except Exception as e:
                 logger.warning(f"Gemini API çağrısında hata oluştu ({e}). Güvenli Fallback motoru devrede.")
-                return self._extract_via_fallback(raw_text)
+                profile = self._extract_via_fallback(raw_text)
         else:
             logger.info("Gemini API anahtarı tanımlı değil veya servis kapalı. Kural tabanlı Fallback motoru kullanılıyor.")
-            return self._extract_via_fallback(raw_text)
+            profile = self._extract_via_fallback(raw_text)
+
+        return self._enrich_with_unknown_category_guesses(raw_text, profile)
+
+    def _enrich_with_unknown_category_guesses(self, raw_text: str, profile: TargetProfile) -> TargetProfile:
+        """
+        Metinde "var ama adını/ismini bilmiyorum" gibi bir kategori var-fakat-değeri-yok
+        ifadesi tespit edilirse, o kategori için en olası değerleri tahmin edip profile ekler.
+        """
+        try:
+            categories = self._detect_unknown_categories(raw_text)
+        except Exception as e:
+            logger.warning(f"Bilinmeyen kategori tespiti başarısız oldu ({e}).")
+            categories = []
+
+        if not categories:
+            return profile
+
+        extra_keywords = set(profile.keywords)
+        for category in categories:
+            try:
+                guesses = self.infer_unknown_values(category, profile)
+                extra_keywords.update(g.strip().capitalize() for g in guesses if g.strip())
+                logger.info(
+                    f"Metinde '{category}' kategorisi belirtilmiş ama değeri verilmemiş; "
+                    f"{len(guesses)} olası değer otomatik eklendi."
+                )
+            except Exception as e:
+                logger.warning(f"'{category}' kategorisi için tahmin başarısız oldu: {e}")
+
+        profile.keywords = sorted(extra_keywords)
+        return profile
+
+    def _detect_unknown_categories(self, raw_text: str) -> list[str]:
+        """Metinde 'var ama değerini bilmiyorum' türünden ifade edilen kategorileri tespit eder."""
+        if self.is_available():
+            try:
+                return self._detect_unknown_categories_via_gemini(raw_text)
+            except Exception as e:
+                logger.warning(f"Gemini kategori tespiti başarısız ({e}). Yerel sezgisel motor devrede.")
+                return self._detect_unknown_categories_heuristic(raw_text)
+        return self._detect_unknown_categories_heuristic(raw_text)
+
+    def _detect_unknown_categories_via_gemini(self, raw_text: str) -> list[str]:
+        valid_keys = list(self.CATEGORY_LABELS.keys())
+        prompt = (
+            f"Aşağıdaki metinde, hedef kişi hakkında şu kategorilerden hangilerinin VAR OLDUĞU belirtiliyor "
+            f"ama TAM DEĞERİ (isim/kelime) verilmiyor ya da açıkça 'bilmiyorum/hatırlamıyorum' deniyor:\n"
+            + "\n".join(f"- {k}: {v}" for k, v in self.CATEGORY_LABELS.items()) + "\n\n"
+            f"Sadece ilgili kategori anahtarlarını ({valid_keys}) JSON string listesi olarak ver "
+            f"(örn: [\"pet\", \"nickname\"]). Hiçbiri yoksa boş liste [] ver.\n\n"
+            f"Metin:\n\"\"\"\n{raw_text}\n\"\"\""
+        )
+        response = self._client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config={"response_mime_type": "application/json"}
+        )
+        if hasattr(response, "text") and response.text:
+            data = json.loads(response.text)
+            if isinstance(data, list):
+                return [str(x).strip() for x in data if str(x).strip() in valid_keys]
+        return []
+
+    UNKNOWN_VALUE_CUES = [
+        "bilmiyorum", "bilmiyoruz", "hatırlamıyorum", "hatırlamıyoruz", "hatirlamiyorum"
+    ]
+    CATEGORY_EXISTENCE_CUES = {
+        "pet": ["köpeği var", "kedisi var", "köpeğim var", "kedim var", "evcil hayvanı var", "evcil hayvan"],
+        "child": ["çocuğu var", "oğlu var", "kızı var", "kardeşi var"],
+        "nickname": ["lakabı var", "takma adı var", "bir lakabı"],
+        "color": ["sevdiği bir renk", "favori rengi", "en sevdiği renk"],
+    }
+
+    def _detect_unknown_categories_heuristic(self, raw_text: str) -> list[str]:
+        lower = raw_text.lower()
+        if not any(cue in lower for cue in self.UNKNOWN_VALUE_CUES):
+            return []
+        found = []
+        for category, cues in self.CATEGORY_EXISTENCE_CUES.items():
+            if any(cue in lower for cue in cues):
+                found.append(category)
+        return found
 
     def generate_semantic_password_roots(self, profile: TargetProfile) -> list[str]:
         """
