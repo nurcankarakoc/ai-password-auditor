@@ -6,12 +6,18 @@ google-genai SDK ile Structured Output (TargetProfile) dönüşümü ve kural ta
 import os
 import re
 import json
+import logging
 from typing import Optional
 from config.settings import settings
 from utils.logger import logger
 from ai.base import BaseAIProvider
 from ai.schemas import TargetProfile
 from ai.local_llm_engine import local_llm_engine
+from utils.platform_helper import print_info
+
+# google-genai SDK'sı, "AFC kullanmayın" gibi kendi iç bilgilendirme uyarılarını
+# doğrudan konsola basar; kullanıcıya teknik gürültü olarak yansımaması için susturuyoruz.
+logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
 _TR_ASCII_MAP = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
 
@@ -29,35 +35,46 @@ class GeminiAIProvider(BaseAIProvider):
         super().__init__(api_key=key)
         self.model_name = model_name
         self._client = None
+        # Bu oturumda (bu provider nesnesinin ömrü boyunca) Gemini/yerel model bir kez
+        # başarısız olduysa bir daha denenmez — aksi halde tek bir profil işleminde
+        # (kategori tespiti + her ilgi alanı için ayrı çağrışım çağrısı gibi) onlarca kez
+        # aynı 503/timeout hatasını tekrar tekrar bekleyip kullanıcıyı gereksiz yavaşlatır.
+        self._gemini_down = False
+        self._local_llm_down = False
 
         if self.api_key:
             try:
                 from google import genai
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
-                logger.warning(f"Google GenAI istemcisi başlatılamadı: {e}")
+                logger.debug(f"Google GenAI istemcisi başlatılamadı: {e}")
 
     def is_available(self) -> bool:
-        """API anahtarı ve istemci geçerli mi?"""
-        return bool(self._client and self.api_key)
+        """API anahtarı ve istemci geçerli mi (ve bu oturumda henüz başarısız olmadı mı)?"""
+        return bool(self._client and self.api_key) and not self._gemini_down
 
     def _cascade(self, gemini_fn, local_fn, fallback_fn, label: str):
         """
         Üç katmanlı yedekleme zinciri: Gemini API (varsa) -> Yerel küçük dil modeli
         (indirilmişse) -> her zaman çalışan statik kural motoru. Her katman kendinden
         önceki başarısız olursa devreye girer, hiçbiri kullanıcıyı bekletmeden çöktürmez.
+        Teknik hata detayları sadece log dosyasına yazılır (konsolda gürültü yapmaz).
         """
         if self.is_available():
             try:
                 return gemini_fn()
             except Exception as e:
-                logger.warning(f"Gemini {label} başarısız oldu ({e}). Yerel model deneniyor.")
+                logger.debug(f"Gemini {label} başarısız oldu ({e}). Yerel model deneniyor.")
+                if not self._gemini_down:
+                    print_info("Gemini API şu an yanıt vermiyor, yerel motora geçildi.")
+                self._gemini_down = True
 
-        if local_llm_engine.is_available():
+        if local_llm_engine.is_available() and not self._local_llm_down:
             try:
                 return local_fn()
             except Exception as e:
-                logger.warning(f"Yerel dil modeli {label} başarısız oldu ({e}). Statik motor devrede.")
+                logger.debug(f"Yerel dil modeli {label} başarısız oldu ({e}). Statik motor devrede.")
+                self._local_llm_down = True
 
         return fallback_fn()
 
@@ -134,7 +151,7 @@ class GeminiAIProvider(BaseAIProvider):
                 if associations:
                     extra_associations.update(a.strip().capitalize() for a in associations if a.strip())
             except Exception as e:
-                logger.warning(f"'{interest}' için çağrışım genişletmesi başarısız oldu: {e}")
+                logger.debug(f"'{interest}' için çağrışım genişletmesi başarısız oldu: {e}")
 
         profile.association_words = sorted(extra_associations)
         return profile
@@ -204,7 +221,7 @@ class GeminiAIProvider(BaseAIProvider):
         try:
             categories = self._detect_unknown_categories(raw_text)
         except Exception as e:
-            logger.warning(f"Bilinmeyen kategori tespiti başarısız oldu ({e}).")
+            logger.debug(f"Bilinmeyen kategori tespiti başarısız oldu ({e}).")
             categories = []
 
         if not categories:
@@ -220,7 +237,7 @@ class GeminiAIProvider(BaseAIProvider):
                     f"{len(guesses)} olası değer otomatik eklendi."
                 )
             except Exception as e:
-                logger.warning(f"'{category}' kategorisi için tahmin başarısız oldu: {e}")
+                logger.debug(f"'{category}' kategorisi için tahmin başarısız oldu: {e}")
 
         profile.keywords = sorted(extra_keywords)
         return profile
