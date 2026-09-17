@@ -64,6 +64,74 @@ class GeminiAIProvider(BaseAIProvider):
         else:
             return self._generate_roots_via_heuristic(profile)
 
+    CATEGORY_LABELS = {
+        "pet": "evcil hayvan (köpek/kedi) ismi",
+        "child": "çocuk veya küçük kardeş ismi",
+        "nickname": "lakap / takma ad",
+        "color": "en sevdiği renk",
+    }
+
+    # Kategori bilinmiyorsa (AI kapalı) kullanılan, Türkiye bağlamında en yaygın değer listeleri.
+    CATEGORY_HEURISTIC_VALUES = {
+        "pet": [
+            "Boncuk", "Karabas", "Pamuk", "Zeytin", "Duman", "Minnos", "Comar",
+            "Fistik", "Bobby", "Luna", "Max", "Seker", "Toprak", "Kaplan", "Pofuduk",
+            "Coco", "Findik", "Sisi", "Simba", "Bella"
+        ],
+        "child": [
+            "Ahmet", "Mehmet", "Ali", "Ayse", "Fatma", "Zeynep", "Elif", "Mustafa",
+            "Emre", "Ece", "Deniz", "Can", "Cem", "Efe", "Yusuf", "Defne", "Asel", "Miray"
+        ],
+        "nickname": [
+            "Aslan", "Kaplan", "Prenses", "Tatli", "Kucuk", "Canim", "Bebek", "Sahin", "Kartal"
+        ],
+        "color": [
+            "Mavi", "Kirmizi", "Siyah", "Beyaz", "Mor", "Yesil", "Sari", "Pembe", "Turuncu"
+        ],
+    }
+
+    def infer_unknown_values(self, category: str, profile: TargetProfile) -> list[str]:
+        """
+        Bilinmeyen bir kategori (ör. isimi bilinmeyen evcil hayvan) için en olası değerleri tahmin eder.
+        """
+        if self.is_available():
+            try:
+                return self._infer_via_gemini(category, profile)
+            except Exception as e:
+                logger.warning(f"Gemini kategori tahmini başarısız ({e}). Yerel liste kullanılıyor.")
+                return self._infer_via_heuristic(category)
+        else:
+            return self._infer_via_heuristic(category)
+
+    def _infer_via_gemini(self, category: str, profile: TargetProfile) -> list[str]:
+        label = self.CATEGORY_LABELS.get(category, category)
+        prompt = (
+            f"Sen bir OSINT ve parola tahmin uzmanısın. Hedef kişi hakkında şu bilgiler biliniyor:\n"
+            f"- İsimler: {profile.names}\n"
+            f"- Tarihler: {profile.dates}\n"
+            f"- Konumlar: {profile.locations}\n"
+            f"- İlgi Alanları: {profile.interests}\n\n"
+            f"Ancak şu kategori için TAM DEĞER bilinmiyor: \"{label}\".\n"
+            f"GÖREV: Türkiye bağlamında, bu kişinin profiline uygun EN OLASI 20 adet değeri tahmin et "
+            f"(örn. kategori 'evcil hayvan ismi' ise Türkiye'de en yaygın köpek/kedi isimlerini öner).\n"
+            f"Yanıtı SADECE JSON formatında bir string listesi olarak ver: [\"deger1\", \"deger2\", ...]"
+        )
+        response = self._client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config={"response_mime_type": "application/json"}
+        )
+        if hasattr(response, "text") and response.text:
+            data = json.loads(response.text)
+            if isinstance(data, list):
+                values = [str(x).strip() for x in data if str(x).strip()]
+                if values:
+                    return values
+        return self._infer_via_heuristic(category)
+
+    def _infer_via_heuristic(self, category: str) -> list[str]:
+        return list(self.CATEGORY_HEURISTIC_VALUES.get(category, []))
+
     def _generate_roots_via_gemini(self, profile: TargetProfile) -> list[str]:
         """Gemini ile hedefin psikolojisine ve takımlarına göre anlamsal kökler üretir."""
         prompt = (

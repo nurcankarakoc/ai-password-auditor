@@ -431,6 +431,34 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     kw_input = input(f"{Fore.GREEN}   > Özel Kelimeler: {Style.RESET_ALL}").strip()
     keywords = [k.strip().capitalize() for k in re.split(r'[,/&+\s]+', kw_input) if k.strip()] if kw_input else []
 
+    # 6. Bilinmeyen Kategoriler İçin AI Tahmini
+    print(f"\n{Fore.CYAN}6. Var Olduğunu Bildiğin Ama TAM DEĞERİNİ Bilmediğin Bir Şey Var mı?{Style.RESET_ALL}")
+    print(f"{Fore.LIGHTBLACK_EX}   Örn: 'Köpeği var ama adını bilmiyorum' — AI, bu kişi için en olası isimleri tahmin edip")
+    print(f"   bunları da parola üretimine dahil eder.{Style.RESET_ALL}")
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Evcil Hayvan İsmi (bilinmiyor)")
+    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Çocuk / Küçük Kardeş İsmi (bilinmiyor)")
+    print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Lakap / Takma Ad (bilinmiyor)")
+    print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sevdiği Renk (bilinmiyor)")
+    cat_input = input(f"{Fore.GREEN}   > Seçiminiz [1-4, virgülle birden fazla, ENTER=geç]: {Style.RESET_ALL}").strip()
+
+    category_map = {"1": "pet", "2": "child", "3": "nickname", "4": "color"}
+    guessed_keywords: List[str] = []
+    if cat_input:
+        provider_for_guess = GeminiAIProvider()
+        partial_profile = TargetProfile(names=names, dates=dates, locations=locations, interests=interests)
+        for sel in cat_input.split(","):
+            category = category_map.get(sel.strip())
+            if not category:
+                continue
+            print_info(f"'{GeminiAIProvider.CATEGORY_LABELS.get(category, category)}' için olası değerler tahmin ediliyor...")
+            guesses = provider_for_guess.infer_unknown_values(category, partial_profile)
+            if guesses:
+                print(f"{Fore.LIGHTBLACK_EX}   -> Tahmin edilenler: {', '.join(guesses[:12])}{'...' if len(guesses) > 12 else ''}{Style.RESET_ALL}")
+                guessed_keywords.extend(guesses)
+
+    if guessed_keywords:
+        keywords = sorted(list(set(keywords + [k.strip().capitalize() for k in guessed_keywords if k.strip()])))
+
     # Aşama 2: Serbest Metin / Ek Notlar Alanı
     print_header("EK HEDEF METNİ / NOTLAR (İsteğe Bağlı)")
     print(f"{Fore.LIGHTBLACK_EX}Yukarıdaki alanlara sığmayan veya serbestçe eklemek istediğiniz cümleleri yazabilirsiniz.")
