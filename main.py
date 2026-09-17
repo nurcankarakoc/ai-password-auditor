@@ -1347,6 +1347,32 @@ def exit_application() -> NoReturn:
     sys.exit(0)
 
 
+def _offer_api_key_setup_if_missing() -> None:
+    """
+    Gemini API anahtarı tanımlı değilse, kullanıcıya program başlarken bir kerelik
+    'şimdi eklemek ister misin?' teklifi sunar. Bu, sadece 'apikey' komutunu bilmesini
+    beklemek yerine daha iyi bir ilk deneyim (onboarding) sağlar. İstemezse hiçbir şeyi
+    bloklamaz, aracın geri kalanı offline motorla normal şekilde çalışmaya devam eder.
+    """
+    if settings.gemini_api_key:
+        return
+
+    clear_screen()
+    print_banner(version=settings.version)
+    print_header("YAPAY ZEKA KURULUMU (İsteğe Bağlı ama Önerilir)")
+    print("Cybzenor, hedef profilleri anlamak ve daha isabetli parola tahminleri üretmek için")
+    print("Google Gemini API kullanabilir. Anahtar olmadan da çalışır (offline kural motoru),")
+    print("ama Gemini ile sonuçlar belirgin şekilde daha akıllı olur.\n")
+    print(f"{Fore.LIGHTBLACK_EX}Ücretsiz anahtar almak için: https://aistudio.google.com/apikey{Style.RESET_ALL}\n")
+
+    choice = input(f"{Fore.GREEN}Şimdi Gemini API anahtarınızı eklemek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
+    if choice in ('e', 'evet', 'y', 'yes'):
+        execute_fast_command("apikey", pause=False)
+    else:
+        print_info("Sorun değil, offline motorla devam edilecek. İstediğiniz an 'apikey' yazarak ekleyebilirsiniz.")
+        pause_prompt()
+
+
 def main() -> None:
     """Ana CLI döngüsü ve komut yönlendiricisi."""
     setup_terminal_encoding()
@@ -1358,6 +1384,8 @@ def main() -> None:
         return
 
     logger.info(f"{settings.app_name} v{settings.version} başlatıldı.")
+
+    _offer_api_key_setup_if_missing()
 
     while True:
         try:
