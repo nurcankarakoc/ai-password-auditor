@@ -35,8 +35,15 @@ class TargetProfile(BaseModel):
         default_factory=list,
         description="Hedefe özel ek anahtar kelimeler, lakaplar veya şirket adları"
     )
+    association_words: List[str] = Field(
+        default_factory=list,
+        description=(
+            "İlgi alanı/kişilik özelliğinden türetilen çağrışım kelimeleri (örn: 'kahve' -> 'latte'). "
+            "İsimle birleştirilmez; tek başına veya tarih/ek ile kullanılır (Tier 0 kök mantığı)."
+        )
+    )
 
-    @field_validator("names", "dates", "locations", "interests", "keywords", mode="before")
+    @field_validator("names", "dates", "locations", "interests", "keywords", "association_words", mode="before")
     @classmethod
     def clean_string_list(cls, v):
         """Boşlukları temizle ve boş stringleri filtrele."""
@@ -66,7 +73,8 @@ class TargetProfile(BaseModel):
             self.locations,
             self.interests,
             self.relations,
-            self.keywords
+            self.keywords,
+            self.association_words
         ])
 
     def to_summary_dict(self) -> dict:
@@ -77,7 +85,8 @@ class TargetProfile(BaseModel):
             "Konumlar": len(self.locations),
             "İlgi Alanları": len(self.interests),
             "İlişkiler": len(self.relations),
-            "Anahtar Kelimeler": len(self.keywords)
+            "Anahtar Kelimeler": len(self.keywords),
+            "Çağrışım Kelimeleri": len(self.association_words)
         }
 
     def to_detailed_dict(self) -> dict:
@@ -88,7 +97,8 @@ class TargetProfile(BaseModel):
             "locations": self.locations,
             "interests": self.interests,
             "relations": self.relations,
-            "keywords": self.keywords
+            "keywords": self.keywords,
+            "association_words": self.association_words
         }
 
 

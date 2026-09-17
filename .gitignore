@@ -21,6 +21,9 @@ wordlists/generated/
 reports/*.json
 reports/*.html
 
+# Yerel AI modeli (isteğe bağlı, setup_local_ai.py ile indirilir, ~1GB)
+models/
+
 # IDE / OS
 .vscode/
 .idea/

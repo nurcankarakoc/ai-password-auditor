@@ -51,8 +51,13 @@ class TestTargetProfileSchema:
 class TestAIProviderAbstractionAndFallback:
     """AI sağlayıcı soyutlaması ve deterministik fallback motoru testleri."""
 
-    def test_gemini_provider_without_api_key_uses_fallback(self):
-        """API anahtarı verilmediğinde is_available False olmalı ve fallback çalışmalı."""
+    def test_gemini_provider_without_api_key_uses_fallback(self, monkeypatch):
+        """API anahtarı verilmediğinde is_available False olmalı ve statik Fallback motoru çalışmalı."""
+        # Bu makinede yerel AI modeli indirilmiş olabilir; bu test özellikle deterministik
+        # statik kural motorunu doğruladığı için yerel modeli devre dışı bırakıyoruz.
+        from ai.local_llm_engine import local_llm_engine
+        monkeypatch.setattr(local_llm_engine, "is_available", lambda: False)
+
         provider = GeminiAIProvider(api_key=None)
         assert provider.is_available() is False
 

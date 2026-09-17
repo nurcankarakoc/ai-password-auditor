@@ -379,6 +379,7 @@ def print_command_help() -> None:
     print(f" {Fore.CYAN}info <hedef>{Style.RESET_ALL}            : Hedefin toplanan tüm OSINT profil detaylarını gösterir.")
     print(f" {Fore.CYAN}search <kelime>{Style.RESET_ALL}         : Wordlist içinde arama yapar (Örn: 'search pamuk').")
     print(f" {Fore.CYAN}unuse / back{Style.RESET_ALL}            : Aktif hedef seçimini temizler.")
+    print(f" {Fore.CYAN}apikey{Style.RESET_ALL}                  : Gemini API anahtarınızı ekler/günceller (AI özelliklerini güçlendirir).")
     print(f" {Fore.CYAN}help / ?{Style.RESET_ALL}                : Bu yardım ekranını gösterir.")
     print(f" {Fore.CYAN}exit / q{Style.RESET_ALL}                : Programdan çıkar.\n")
     print(f"{Fore.LIGHTBLACK_EX}Örnek: 'targets' yazıp hedefleri görebilir, 'use target_01' ile aktif edip 'view 10' diyebilirsiniz.{Style.RESET_ALL}")
@@ -493,6 +494,23 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
         query = args[0]
         target = args[1] if len(args) > 1 else None
         cmd_search_wordlist(query=query, target=target)
+        maybe_pause()
+        return True
+
+    # 9b. Gemini API anahtarı ekleme/güncelleme (apikey)
+    if cmd in ["apikey", "api-key", "anahtar"]:
+        from config.settings import settings, save_gemini_api_key
+        print_header("GEMINI API ANAHTARI")
+        if settings.gemini_api_key:
+            masked = settings.gemini_api_key[:6] + "..." + settings.gemini_api_key[-4:]
+            print(f"{Fore.LIGHTBLACK_EX}Mevcut anahtar: {masked}{Style.RESET_ALL}")
+        print(f"{Fore.LIGHTBLACK_EX}Ücretsiz anahtar almak için: https://aistudio.google.com/apikey{Style.RESET_ALL}")
+        new_key = input(f"{Fore.GREEN}Yeni Gemini API anahtarınızı yapıştırın [ENTER = vazgeç]: {Style.RESET_ALL}").strip()
+        if new_key:
+            save_gemini_api_key(new_key)
+            print_success("API anahtarı kaydedildi. Artık AI özellikleri Gemini üzerinden çalışacak.")
+        else:
+            print_info("İşlem iptal edildi.")
         maybe_pause()
         return True
 
