@@ -645,6 +645,12 @@ def handle_targeted_wordlist_generation() -> None:
         print(f" • Priority 3 (Düşük/Leet)    : {meta['priority_distribution']['priority_3_low']:,}")
         print(f" • Geçen Süre       : {meta['duration_seconds']} sn")
         print(f" • Metadata         : {output_file.name}.metadata.json")
+        if meta.get("below_recommended_minimum"):
+            print_warning(
+                f"Üretilen aday sayısı ({meta['total_candidates']:,}) önerilen minimumun "
+                f"({settings.wordlist.min_candidates:,}) altında kaldı — profil bilgisi az. "
+                f"Daha kapsamlı sonuç için isim/tarih/ilgi alanı gibi ek bilgiler girmeyi deneyin."
+            )
 
         save_target_profile_to_disk(profile)
 

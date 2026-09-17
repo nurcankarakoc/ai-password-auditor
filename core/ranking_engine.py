@@ -162,6 +162,7 @@ class RankingEngine:
             "created_at": end_time.isoformat(),
             "duration_seconds": duration,
             "total_candidates": written_count,
+            "below_recommended_minimum": written_count < settings.wordlist.min_candidates,
             "priority_distribution": {
                 "priority_1_high": priority_1_count,
                 "priority_2_medium": priority_2_count,
@@ -254,6 +255,7 @@ class RankingEngine:
             "total_candidates": total_written,
             "targeted_candidates": targeted_count,
             "default_candidates": default_count,
+            "below_recommended_minimum": total_written < settings.wordlist.min_candidates,
             "file_size_bytes": output_path.stat().st_size if output_path.exists() else 0
         }
 

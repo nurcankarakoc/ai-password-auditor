@@ -14,9 +14,18 @@ class WordlistConfig(BaseModel):
     """Wordlist üretim ve filtreleme limitleri."""
     min_length: int = Field(default=6, ge=1, le=128, description="Minimum parola uzunluğu")
     max_length: int = Field(default=32, ge=1, le=256, description="Maksimum parola uzunluğu")
-    max_candidates: int = Field(default=500_000, ge=100, le=10_000_000, description="Maksimum aday sayısı limiti")
+    min_candidates: int = Field(default=3_000, ge=1, le=10_000_000, description="Önerilen minimum aday sayısı (bilgilendirme amaçlı)")
+    max_candidates: int = Field(default=10_000, ge=100, le=10_000_000, description="Maksimum aday sayısı limiti (wordlist bu sayıda kesilir)")
     deduplicate: bool = Field(default=True, description="Mükerrer adayları filtrele")
     case_sensitive_dedup: bool = Field(default=True, description="Tekilleştirme büyük/küçük harf duyarlı mı?")
+
+    @field_validator("max_candidates")
+    @classmethod
+    def validate_candidate_bounds(cls, v: int, info) -> int:
+        min_c = info.data.get("min_candidates", 3_000)
+        if v < min_c:
+            raise ValueError(f"max_candidates ({v}), min_candidates ({min_c}) değerinden küçük olamaz.")
+        return v
 
     @field_validator("max_length")
     @classmethod
