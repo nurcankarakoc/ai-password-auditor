@@ -965,11 +965,61 @@ def handle_online_login_audit() -> None:
         return
     password_field = input(f"{Fore.CYAN}6. Parola Alan İsmi [ENTER = password]: {Style.RESET_ALL}").strip() or "password"
 
-    print(f"\n{Fore.CYAN}7. Başarı Nasıl Tespit Edilsin?{Style.RESET_ALL}")
-    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Yanıt metninde bir BAŞARI belirteci ara (örn: 'Hoş geldiniz', 'Dashboard')")
-    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yanıt metninde bir HATA belirteci ara (yokluğu = başarı) (örn: 'Hatalı parola', 'Invalid')")
+    csrf_field = None
+    csrf_regex = None
+    csrf_in = input(f"\n{Fore.CYAN}7. Form bir CSRF token gerektiriyor mu? [e/H]: {Style.RESET_ALL}").strip().lower()
+    if csrf_in in ('e', 'evet', 'y', 'yes'):
+        csrf_field = input(f"{Fore.CYAN}   CSRF alan ismi (örn: csrf_token): {Style.RESET_ALL}").strip() or None
+        csrf_regex = input(f"{Fore.CYAN}   Token'ı yakalayacak regex (1 grup, örn: name=\"csrf_token\" value=\"(.*?)\"): {Style.RESET_ALL}").strip() or None
+
+    delay_in = input(f"\n{Fore.CYAN}8. İstekler arası bekleme (ms) [ENTER = {settings.safety.online_request_delay_ms}]: {Style.RESET_ALL}").strip()
+    request_delay_ms = int(delay_in) if delay_in.isdigit() else None
+
+    # --- Otomatik "sahte deneme" (probe): bilinçli olarak YANLIŞ bir parolayla tek istek atıp
+    # gerçek yanıtı kullanıcıya gösteriyoruz, böylece "başarı nasıl tespit edilsin" sorusu
+    # tahmine değil gerçek veriye dayanıyor. Wordlist henüz devreye girmiyor.
+    print_header("9. YANIT ANALİZİ (Otomatik Sahte Deneme)")
+    print_info("Bilinçli olarak YANLIŞ bir parolayla tek bir deneme yapılıyor, sadece hedefin nasıl cevap verdiğini görmek için...")
+
+    probe_status: Optional[int] = None
+    probe_text: str = ""
+    try:
+        probe_service = HttpLoginAuditService(
+            target_url=target_url,
+            username_field=username_field,
+            username_value=username_value,
+            password_field=password_field,
+            method=method,
+            content_type=content_type,
+            csrf_field=csrf_field,
+            csrf_regex=csrf_regex,
+            request_delay_ms=0,
+        )
+        probe_status, probe_text, _ = probe_service.attempt_login("cybzenor_probe_kasitli_yanlis_9231")
+        snippet = re.sub(r'\s+', ' ', probe_text).strip()[:300]
+        print(f" • HTTP Status Kodu : {Fore.YELLOW}{probe_status}{Style.RESET_ALL}")
+        print(f" • Yanıt Önizleme   : {Fore.LIGHTBLACK_EX}{snippet or '(boş yanıt)'}{Style.RESET_ALL}")
+        if probe_status in (200, 301, 302, 303):
+            print_warning(
+                f"DİKKAT: Yanlış parolada bile HTTP {probe_status} döndü! "
+                f"Bu durumda '[3] Sadece status koduna bak' seçeneği YANLIŞ POZİTİF üretir (ilk denemede 'başarılı' sanabilir)."
+            )
+    except Exception as e:
+        print_warning(f"Otomatik ön deneme başarısız oldu (ağ hatası olabilir): {e}")
+        print_info("Yine de devam edebilirsin, ama aşağıdaki seçimi yukarıdaki yanıt olmadan tahmine dayalı yapman gerekecek.")
+
+    print(f"\n{Fore.CYAN}10. Başarı Nasıl Tespit Edilsin?{Style.RESET_ALL}")
+    print(f"{Fore.LIGHTBLACK_EX}    Yukarıdaki YANLIŞ parola denemesinin yanıtıyla, doğru bir parola girildiğinde alacağın yanıt")
+    print(f"    muhtemelen FARKLI olacaktır (farklı metin, farklı status kodu ya da bir yönlendirme). O farkı burada tanımla.{Style.RESET_ALL}")
+    print(f" {Fore.CYAN}[1]{Style.RESET_ALL} Yanıt metninde bir BAŞARI belirteci ara — SADECE doğru girişte görünen bir kelime/ifade")
+    print(f"      {Fore.LIGHTBLACK_EX}örn: 'Hoş geldiniz', 'Dashboard', 'Çıkış Yap' — yukarıdaki yanlış-parola yanıtında GEÇMEYEN bir ifade seç{Style.RESET_ALL}")
+    print(f" {Fore.CYAN}[2]{Style.RESET_ALL} Yanıt metninde bir HATA belirteci ara — bu ifadenin YOKLUĞU başarı sayılır")
+    print(f"      {Fore.LIGHTBLACK_EX}örn: yukarıda gördüğün hata mesajını aynen yapıştır (örn: 'Hatalı parola', 'Invalid credentials'){Style.RESET_ALL}")
     print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı)")
-    detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-3, ENTER=3]: {Style.RESET_ALL}").strip()
+    if probe_status in (200, 301, 302, 303):
+        print(f"      {Fore.RED}(Yukarıdaki uyarı nedeniyle bu site için ÖNERİLMEZ){Style.RESET_ALL}")
+    default_detect = "2" if probe_status in (200, 301, 302, 303) else "3"
+    detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-3, ENTER={default_detect}]: {Style.RESET_ALL}").strip() or default_detect
 
     success_indicator = None
     failure_indicator = None
@@ -977,16 +1027,6 @@ def handle_online_login_audit() -> None:
         success_indicator = input(f"{Fore.CYAN}   Başarı belirteci metni: {Style.RESET_ALL}").strip()
     elif detect_choice == "2":
         failure_indicator = input(f"{Fore.CYAN}   Hata belirteci metni: {Style.RESET_ALL}").strip()
-
-    csrf_field = None
-    csrf_regex = None
-    csrf_in = input(f"\n{Fore.CYAN}8. Form bir CSRF token gerektiriyor mu? [e/H]: {Style.RESET_ALL}").strip().lower()
-    if csrf_in in ('e', 'evet', 'y', 'yes'):
-        csrf_field = input(f"{Fore.CYAN}   CSRF alan ismi (örn: csrf_token): {Style.RESET_ALL}").strip() or None
-        csrf_regex = input(f"{Fore.CYAN}   Token'ı yakalayacak regex (1 grup, örn: name=\"csrf_token\" value=\"(.*?)\"): {Style.RESET_ALL}").strip() or None
-
-    delay_in = input(f"\n{Fore.CYAN}9. İstekler arası bekleme (ms) [ENTER = {settings.safety.online_request_delay_ms}]: {Style.RESET_ALL}").strip()
-    request_delay_ms = int(delay_in) if delay_in.isdigit() else None
 
     # Wordlist seçimi (aynı seçici Hash Denetim Motoru ile paylaşılıyor)
     chosen_wl = _select_audit_wordlist()
