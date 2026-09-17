@@ -209,16 +209,20 @@ class MockAuthService:
 def run_safety_monitored_audit(
     wordlist_path: Path,
     mock_service: MockAuthService,
-    safety_controller: Optional[SafetyController] = None
+    safety_controller: Optional[SafetyController] = None,
+    exclude_passwords: Optional[set] = None
 ) -> Dict[str, Any]:
     """
     Wordlist'teki adayları MockAuthService üzerinde SafetyController denetiminde koşturur.
+    exclude_passwords verilirse, o kümedeki adaylar (case-insensitive) denenmeden atlanır;
+    bilinen/artık geçerli olmayan bir parolanın yanlış pozitif üretmesini engellemek için kullanılır.
     """
     if not wordlist_path.is_file():
         raise FileNotFoundError(f"Wordlist dosyası bulunamadı: {wordlist_path}")
 
     ctrl = safety_controller or SafetyController()
     ctrl.reset()
+    exclude_lower = {p.lower() for p in exclude_passwords} if exclude_passwords else set()
 
     start_time = time.time()
     matched_password: Optional[str] = None
@@ -227,6 +231,8 @@ def run_safety_monitored_audit(
 
     try:
         for candidate in wordlist_manager.stream_lines(wordlist_path):
+            if candidate.lower() in exclude_lower:
+                continue
             status_code, resp_text, is_success = mock_service.attempt_login(candidate)
 
             if is_success:
