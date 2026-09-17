@@ -39,3 +39,16 @@ class BaseAIProvider(ABC):
         olup olmadığını bildirir.
         """
         pass
+
+    @abstractmethod
+    def infer_unknown_values(self, category: str, profile: TargetProfile) -> list[str]:
+        """
+        Kullanıcının VARLIĞINI bildiği ama TAM DEĞERİNİ bilmediği bir kategori için
+        (örn. "evcil hayvanının adını bilmiyorum ama köpeği var") hedef profilin
+        bağlamına göre en olası değerleri tahmin eder.
+
+        :param category: Kategori anahtarı (örn. "pet", "child", "nickname", "color")
+        :param profile: Bilinen diğer hedef bilgileri (isim/tarih/konum/ilgi alanı)
+        :return: Tahmini değerler listesi (en olasıdan en az olasıya doğru sıralı değildir)
+        """
+        pass
