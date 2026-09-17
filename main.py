@@ -1043,6 +1043,12 @@ def handle_online_login_audit() -> None:
         exclude_passwords = {p.strip() for p in exclude_in.split(",") if p.strip()}
         print_info(f"Şu parolalar denemeden hariç tutulacak: {', '.join(exclude_passwords)}")
 
+    threshold_in = input(
+        f"\n{Fore.CYAN}12. Kaç ardışık başarısızlıktan sonra güvenlik koruması devreye girsin? "
+        f"[ENTER = {settings.safety.max_consecutive_failures}]: {Style.RESET_ALL}"
+    ).strip()
+    max_consecutive_failures = int(threshold_in) if threshold_in.isdigit() and int(threshold_in) > 0 else settings.safety.max_consecutive_failures
+
     # Wordlist seçimi (aynı seçici Hash Denetim Motoru ile paylaşılıyor)
     chosen_wl = _select_audit_wordlist()
     if chosen_wl is None:
@@ -1056,7 +1062,7 @@ def handle_online_login_audit() -> None:
     print(f" • Wordlist         : {chosen_wl.name}")
     if exclude_passwords:
         print(f" • Hariç Tutulanlar : {', '.join(exclude_passwords)}")
-    print(f" • Güvenlik Eşiği   : {settings.safety.max_consecutive_failures} ardışık başarısızlık")
+    print(f" • Güvenlik Eşiği   : {max_consecutive_failures} ardışık başarısızlık")
     final_confirm = input(f"\n{Fore.YELLOW}Denetim başlatılsın mı? [E/h]: {Style.RESET_ALL}").strip().lower()
     if final_confirm not in ('e', 'evet', 'y', 'yes'):
         print_info("İşlem kullanıcı tarafından iptal edildi.")
@@ -1079,30 +1085,52 @@ def handle_online_login_audit() -> None:
         )
 
         print_info("Canlı denetim başlatılıyor (SafetyController gözetiminde)...")
-        report = run_safety_monitored_audit(
-            wordlist_path=chosen_wl,
-            mock_service=service,
-            safety_controller=SafetyController(),
-            exclude_passwords=exclude_passwords
-        )
 
-        print_header("CANLI LOGIN DENETİM SONUÇ RAPORU")
-        if report["status"] == "MATCH_FOUND":
-            print_success("PAROLA BAŞARIYLA TESPİT EDİLDİ (MATCH)!")
-            print(f" • Açık Parola       : {Fore.YELLOW}{Style.BRIGHT}{report['matched_password']}{Style.RESET_ALL}")
-            print(f" • Deneme Sayısı     : {report['attempts_made']:,}")
-            print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
-        elif report["status"].startswith("SAFETY_HALTED"):
-            print_warning("TEST GÜVENLİK PROTOKOLÜ GEREĞİ DURDURULDU:")
-            print(f" • Durum             : {report['status']}")
-            print(f" • Açıklama          : {report['error_message']}")
-            print(f" • Yapılan Deneme    : {report['attempts_made']:,}")
-            print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
-            print_success("Güvenlik Denetleyicisi etik sınırları koruyarak hedefi koruma altına aldı.")
-        else:
-            print_error("EŞLEŞME BULUNAMADI!")
-            print(f" • Deneme Sayısı     : {report['attempts_made']:,}")
-            print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+        start_index = 0
+        while True:
+            report = run_safety_monitored_audit(
+                wordlist_path=chosen_wl,
+                mock_service=service,
+                safety_controller=SafetyController(max_consecutive_failures=max_consecutive_failures),
+                exclude_passwords=exclude_passwords,
+                start_index=start_index
+            )
+
+            print_header("CANLI LOGIN DENETİM SONUÇ RAPORU")
+            if report["status"] == "MATCH_FOUND":
+                print_success("PAROLA BAŞARIYLA TESPİT EDİLDİ (MATCH)!")
+                print(f" • Açık Parola       : {Fore.YELLOW}{Style.BRIGHT}{report['matched_password']}{Style.RESET_ALL}")
+                print(f" • Deneme Sayısı     : {report['attempts_made']:,}")
+                print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+                break
+
+            elif report["status"].startswith("SAFETY_HALTED"):
+                trip_reason = report["safety_status"].get("trip_reason")
+                print_warning("TEST GÜVENLİK PROTOKOLÜ GEREĞİ DURDURULDU:")
+                print(f" • Durum             : {report['status']}")
+                print(f" • Açıklama          : {report['error_message']}")
+                print(f" • Yapılan Deneme    : {report['attempts_made']:,}")
+                print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+                print_success("Güvenlik Denetleyicisi etik sınırları koruyarak hedefi koruma altına aldı.")
+
+                if trip_reason == "MAX_CONSECUTIVE_FAILURES_EXCEEDED":
+                    print(f"\n{Fore.LIGHTBLACK_EX}Bu, hedeften gelen gerçek bir engelleme sinyali DEĞİL — kendi belirlediğimiz")
+                    print(f"({max_consecutive_failures}) ardışık başarısızlık eşiğine ulaşıldığı için durduk.{Style.RESET_ALL}")
+                    cont = input(f"{Fore.YELLOW}Kaldığı yerden devam edilsin mi? [e/H]: {Style.RESET_ALL}").strip().lower()
+                    if cont in ('e', 'evet', 'y', 'yes'):
+                        start_index = report["next_start_index"]
+                        print_info(f"Kaldığı yerden ({start_index}. adaydan itibaren) devam ediliyor...")
+                        continue
+                else:
+                    print(f"\n{Fore.RED}Bu, hedef sistemden gelen GERÇEK bir engelleme sinyali (rate-limit/hesap kilitleme/CAPTCHA).")
+                    print(f"Hedefi korumak için devam seçeneği sunulmuyor.{Style.RESET_ALL}")
+                break
+
+            else:
+                print_error("EŞLEŞME BULUNAMADI!")
+                print(f" • Deneme Sayısı     : {report['attempts_made']:,}")
+                print(f" • Geçen Süre        : {report['elapsed_seconds']} saniye")
+                break
 
     except Exception as e:
         logger.exception(f"Canlı login denetimi hatası: {e}")

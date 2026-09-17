@@ -210,12 +210,16 @@ def run_safety_monitored_audit(
     wordlist_path: Path,
     mock_service: MockAuthService,
     safety_controller: Optional[SafetyController] = None,
-    exclude_passwords: Optional[set] = None
+    exclude_passwords: Optional[set] = None,
+    start_index: int = 0
 ) -> Dict[str, Any]:
     """
     Wordlist'teki adayları MockAuthService üzerinde SafetyController denetiminde koşturur.
     exclude_passwords verilirse, o kümedeki adaylar (case-insensitive) denenmeden atlanır;
     bilinen/artık geçerli olmayan bir parolanın yanlış pozitif üretmesini engellemek için kullanılır.
+    start_index verilirse, wordlist'teki o satır sayısı kadar aday atlanarak devam edilir
+    (önceki bir denetimin MAX_CONSECUTIVE_FAILURES_EXCEEDED ile durduğu yerden kaldığı yerden sürdürmek için).
+    Dönen sonuçtaki "next_start_index", bir sonraki çağrıda start_index olarak kullanılabilir.
     """
     if not wordlist_path.is_file():
         raise FileNotFoundError(f"Wordlist dosyası bulunamadı: {wordlist_path}")
@@ -228,9 +232,14 @@ def run_safety_monitored_audit(
     matched_password: Optional[str] = None
     stop_reason: str = "COMPLETED_WITHOUT_MATCH"
     error_message: Optional[str] = None
+    next_start_index = start_index
 
     try:
-        for candidate in wordlist_manager.stream_lines(wordlist_path):
+        for idx, candidate in enumerate(wordlist_manager.stream_lines(wordlist_path)):
+            if idx < start_index:
+                continue
+            next_start_index = idx + 1
+
             if candidate.lower() in exclude_lower:
                 continue
             status_code, resp_text, is_success = mock_service.attempt_login(candidate)
@@ -256,6 +265,7 @@ def run_safety_monitored_audit(
         "matched_password": matched_password,
         "attempts_made": ctrl.total_attempts,
         "consecutive_failures": ctrl.consecutive_failures,
+        "next_start_index": next_start_index,
         "elapsed_seconds": elapsed,
         "error_message": error_message,
         "safety_status": ctrl.get_status()
