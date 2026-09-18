@@ -41,8 +41,17 @@ def display_system_status() -> None:
     print(f" • Maksimum Aday Limiti   : {settings.wordlist.max_candidates:,}")
     print(f" • Log Seviyesi / Maskele : {settings.log_level} / {'Aktif' if settings.mask_sensitive_data else 'Pasif'}")
     print(f" • Güvenlik Hata Eşiği    : {settings.safety.max_consecutive_failures} ardışık deneme")
-    if settings.gemini_api_key:
+    # settings.gemini_api_key'in salt VAR OLMASI yerine gerçek provider durumuna bakılır —
+    # anahtar hatalıysa (istemci kurulamadıysa) ya da Gemini bu oturumda geçici olarak
+    # "düşmüş" işaretliyse, ekran yanlışlıkla "Aktif" göstermesin.
+    from ai.provider_gemini import GeminiAIProvider as _GeminiCheck
+    _ai_check = _GeminiCheck()
+    if _ai_check.is_available():
         ai_status = f"{Fore.GREEN}Gemini API Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    elif settings.gemini_api_key and _ai_check.client_init_error:
+        ai_status = f"{Fore.RED}Gemini anahtarı geçersiz/başlatılamadı — 'apikey' ile güncelleyin{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    elif settings.gemini_api_key:
+        ai_status = f"{Fore.YELLOW}Gemini şu an yanıt vermiyor, offline motor devrede{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     else:
         ai_status = f"{Fore.YELLOW}Offline Motor (API key yok — 'apikey' yazarak ekleyebilirsiniz){Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     print(f" • AI Motoru              : {ai_status}")
@@ -430,8 +439,10 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     # 5. Özel Kelimeler / Renk / Lakap
     print(f"\n{Fore.CYAN}5. Özel Kelimeler, Sevdiği Renk veya Lakap:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: mor, mavi, yazılımcı, kartal{Style.RESET_ALL}")
-    from ai.local_llm_engine import local_llm_engine as _local_llm_check
-    if not settings.gemini_api_key and not _local_llm_check.is_available():
+    # settings.gemini_api_key'in VAR OLMASI yerine provider'ın gerçek has_real_ai()
+    # kontrolüne bakılır — anahtar geçersizse veya Gemini şu an düşmüşse (soğuma
+    # süresinde) de bu uyarı doğru şekilde gösterilsin.
+    if not GeminiAIProvider().has_real_ai():
         print(f"{Fore.YELLOW}   Not: AI aktif değil (bkz. 'apikey' komutu) — sistem kelime TAHMİN ETMEYECEK,")
         print(f"   sadece burada bizzat yazdığınız kelimeleri kullanacak. Aklınıza gelen her şeyi girin.{Style.RESET_ALL}")
     kw_input = input(f"{Fore.GREEN}   > Özel Kelimeler: {Style.RESET_ALL}").strip()
@@ -587,7 +598,10 @@ def _ask_wordlist_filename(default_filename: str, prompt_label: str = "Kaydedile
     while True:
         custom_name = input(f"{Fore.CYAN}{prompt_label} [ENTER = {default_filename}]: {Style.RESET_ALL}").strip()
         if not custom_name:
-            return default_filename
+            # Güvenlik: Path(...).name, olası "../" bileşenlerini atıp yalnızca son parçayı
+            # bırakır — default_filename ileride AI kaynaklı bir isimden türetilmiş olsa bile
+            # wordlists/generated/ dışına yazılmayı engeller.
+            return Path(default_filename).name or "wordlist.txt"
 
         if custom_name.lower() in _REFLEX_ANSWER_TOKENS:
             confirm = input(
@@ -598,7 +612,8 @@ def _ask_wordlist_filename(default_filename: str, prompt_label: str = "Kaydedile
             if confirm not in ('e', 'evet', 'y', 'yes'):
                 continue
 
-        return custom_name if custom_name.lower().endswith(".txt") else f"{custom_name}.txt"
+        safe_name = Path(custom_name).name or "wordlist"
+        return safe_name if safe_name.lower().endswith(".txt") else f"{safe_name}.txt"
 
 
 def handle_targeted_wordlist_generation() -> None:
@@ -1046,7 +1061,10 @@ def handle_online_login_audit() -> None:
         print_info("Yine de devam edebilirsin, ama aşağıdaki seçimi yukarıdaki yanıt olmadan tahmine dayalı yapman gerekecek.")
 
     risky_status = probe_status in (200, 301, 302, 303)
-    auto_available = bool(probe_text) and probe_status is not None
+    # probe_status=0, HttpLoginAuditService'in ağ hatalarında döndürdüğü özel bir işaretçidir
+    # (gerçek bir HTTP status kodu asla 0 olamaz). Bunu "geçerli taban" saymak, denetim
+    # sırasında ilk parolayı yanlışlıkla 'başarılı' olarak işaretletebilir (0 != gerçek kod).
+    auto_available = bool(probe_text) and probe_status not in (None, 0)
     default_detect = "1" if auto_available else ("3" if risky_status else "4")
 
     print(f"\n{Fore.CYAN}10. Başarı Nasıl Tespit Edilsin?{Style.RESET_ALL}")
@@ -1058,8 +1076,8 @@ def handle_online_login_audit() -> None:
     status_note = f" {Fore.RED}[bu site için önerilmez, yukarıya bak]{Style.RESET_ALL}" if risky_status else ""
     print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Sadece HTTP status koduna bak (200/301/302/303 = başarı){status_note}")
     detect_choice = input(f"{Fore.GREEN}Seçiminiz [1-4, ENTER={default_detect}]: {Style.RESET_ALL}").strip() or default_detect
-    if detect_choice == "1" and not auto_available:
-        print_error("Otomatik mod probe verisi olmadan çalışamaz. Lütfen 2, 3 veya 4 seçin.")
+    while detect_choice == "1" and not auto_available:
+        print_error("Otomatik mod probe verisi olmadan çalışamaz (yanlış-pozitif üretir). Lütfen 2, 3 veya 4 seçin.")
         detect_choice = input(f"{Fore.GREEN}Seçiminiz [2-4]: {Style.RESET_ALL}").strip() or "4"
 
     def _ask_indicator(label: str, must_be_in_probe: Optional[bool]) -> str:

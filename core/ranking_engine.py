@@ -120,6 +120,10 @@ class RankingEngine:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = f"ai_targeted_{target_slug.lower()}_{timestamp}.txt"
 
+        # Güvenlik: output_filename bir AI tarafından (Gemini/yerel model) serbest metinden
+        # çıkarılan bir isme dayanıyor olabilir. Path(...).name, olası "../" veya dizin
+        # ayraçlarını atıp sadece son bileşeni alarak generated_dir dışına yazmayı engeller.
+        output_filename = Path(output_filename).name or "wordlist.txt"
         output_path = generated_dir / output_filename
         metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
 
@@ -200,6 +204,9 @@ class RankingEngine:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = f"hybrid_{target_slug.lower()}_{timestamp}.txt"
 
+        # Güvenlik: bkz. build_targeted_wordlist'teki aynı not — AI kaynaklı isimler
+        # generated_dir dışına path traversal ile yazamasın diye sadece dosya adı alınır.
+        output_filename = Path(output_filename).name or "wordlist.txt"
         output_path = generated_dir / output_filename
         metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
 

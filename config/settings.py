@@ -132,7 +132,13 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
     if env_log_level:
         data["log_level"] = env_log_level
 
-    return AppSettings(**data)
+    try:
+        return AppSettings(**data)
+    except Exception as e:
+        # Örn: eski bir config.json'da max_candidates < min_candidates gibi artık geçersiz
+        # bir kombinasyon olabilir. Programı çökertmek yerine varsayılan ayarlara düşeriz.
+        print(f"[UYARI] Konfigürasyon doğrulanamadı ({e}). Varsayılan ayarlar yükleniyor.")
+        return AppSettings()
 
 
 ENV_FILE_PATH: Path = BASE_DIR / ".env"
