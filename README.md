@@ -57,9 +57,11 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-*(İsteğe Bağlı: Google Gemini Yapay Zeka anahtarınız varsa sisteme tanıtabilirsiniz; **yoksa da sorun değil**, araç dahili çevrimdışı NLP motoruyla %100 çalışır):*
+*(İsteğe Bağlı: Google Gemini, OpenAI (ChatGPT) veya Anthropic (Claude) API anahtarınız varsa sisteme tanıtabilirsiniz; **yoksa da sorun değil**, araç dahili çevrimdışı NLP motoruyla %100 çalışır):*
 ```bash
 export GEMINI_API_KEY="AIzaSy..."
+# veya çalıştırdıktan sonra herhangi bir yerde 'apikey' yazıp anahtarınızı yapıştırın —
+# Gemini/OpenAI/Anthropic formatı otomatik tanınır.
 ```
 
 ---
@@ -175,15 +177,15 @@ Yeni başlayanların en sık sorduğu soru: *"Neden direkt şifreyi yazıp aram�
 > **Cevap:** Terminalde yanlış dizindesiniz demektir (muhtemelen `~` ana klasöründesiniz).  
 > Çözüm: `cd ~/ai-password-auditor` yazarak proje klasörünün içine girip öyle `git pull` yapın.
 
-### S: Gemini API Anahtarı (API Key) almak zorunda mıyım?
-> **Cevap:** Hayır, zorunlu değil, ama **şiddetle önerilir** — ücretsiz ve 1 dakika sürer. Cybzenor 3 katmanlı bir AI zinciri kullanır:
-> 1. **Gemini API** (anahtar girildiyse) — en akıllı/en doğru sonuç. **Önerilen yol budur.**
-> 2. **Yerel Küçük Dil Modeli** (isteğe bağlı, `python setup_local_ai.py` ile ~1GB indirilir) — API anahtarı olmadan tamamen offline çalışır, ancak küçük model boyutu nedeniyle çıktı kalitesi Gemini'nin gerisindedir; deneysel bir seçenek olarak düşünün.
+### S: API Anahtarı (API Key) almak zorunda mıyım? Sadece Gemini mi destekleniyor?
+> **Cevap:** Hayır, zorunlu değil, ama **şiddetle önerilir** — ücretsiz ve 1 dakika sürer. Cybzenor artık **3 farklı bulut AI sağlayıcısını** (Gemini, OpenAI/ChatGPT, Anthropic/Claude) destekler ve genel olarak 3 katmanlı bir zincir kullanır:
+> 1. **Bulut AI** (Gemini → OpenAI → Anthropic önceliğiyle, hangisinin anahtarı çalışıyorsa) — en akıllı/en doğru sonuç. **Önerilen yol budur.** Gemini önceliklidir çünkü kalıcı bir ücretsiz katmanı vardır; OpenAI/Anthropic sadece Gemini kullanılamadığında (kota/kesinti) devreye girer.
+> 2. **Yerel Küçük Dil Modeli** (isteğe bağlı, `python setup_local_ai.py` ile ~1GB indirilir) — hiç API anahtarı olmadan tamamen offline çalışır, ancak küçük model boyutu nedeniyle çıktı kalitesi bulut AI'nin gerisindedir; deneysel bir seçenek olarak düşünün.
 > 3. **Statik Kural/Regex Motoru** — hiçbiri kurulu değilse devreye girer, yine de hedefin takımları/isimleri/ilişkilerini makul doğrulukla ayrıştırır.
 >
-> **Kendi API anahtarınızı eklemek için:** [aistudio.google.com/apikey](https://aistudio.google.com/apikey) adresinden ücretsiz bir anahtar alın, sonra Cybzenor'da herhangi bir yerde `apikey` yazıp yapıştırın — anahtar `.env` dosyasına kaydedilir (asla GitHub'a gitmez, `.gitignore`'da tanımlıdır) ve bir daha girmenize gerek kalmaz.
+> **Kendi API anahtarınızı eklemek için:** Cybzenor'da herhangi bir yerde `apikey` yazıp Gemini ([aistudio.google.com/apikey](https://aistudio.google.com/apikey) — ücretsiz), OpenAI veya Anthropic anahtarlarından **herhangi birini** yapıştırın; hangi servise ait olduğu formatından **otomatik tanınır** (Gemini `AIzaSy...`/`AQ....`, OpenAI `sk-...`, Anthropic `sk-ant-...`). Tanınamazsa kısa bir menüden elle seçebilirsiniz. Anahtar `.env` dosyasına kaydedilir (asla GitHub'a gitmez, `.gitignore`'da tanımlıdır) ve bir daha girmenize gerek kalmaz.
 >
-> **Ücretsiz kota dolarsa ne olur?** Google'ın ücretsiz katmanı günde/dakikada sınırlı istek hakkı verir (`RESOURCE_EXHAUSTED` hatası). Cybzenor önce geçici hatalarda (sunucu yoğunluğu) birkaç kez otomatik tekrar dener; kota tamamen dolduysa `apikey` komutunu **tekrar** çalıştırıp ikinci (farklı bir Google hesabından alınmış) bir anahtar ekleyebilirsiniz — mevcut anahtarın YERİNE değil YANINA kaydedilir, ve bir anahtarın kotası dolduğunda sistem otomatik olarak sıradaki anahtara geçer. Hiç yedek anahtar yoksa (veya hepsi dolduysa) otomatik olarak yerel motora düşer.
+> **Ücretsiz kota dolarsa ne olur?** Google'ın ücretsiz katmanı günde/dakikada sınırlı istek hakkı verir (`RESOURCE_EXHAUSTED` hatası). Cybzenor önce geçici hatalarda (sunucu yoğunluğu) birkaç kez otomatik tekrar dener; kota tamamen dolduysa `apikey` komutunu **tekrar** çalıştırıp ikinci bir Gemini anahtarı (farklı bir Google hesabından) YA DA farklı bir sağlayıcıdan (OpenAI/Anthropic) anahtar ekleyebilirsiniz — mevcut anahtarların YERİNE değil YANINA kaydedilir, ve bir anahtarın/sağlayıcının kotası dolduğunda sistem otomatik olarak sıradakine geçer. Hiç yedek yoksa (veya hepsi dolduysa) otomatik olarak yerel motora düşer.
 
 ### S: Ürettiğim wordlist'ler ve hedef bilgileri GitHub'a yüklenir mi?
 > **Cevap:** Hayır. `.gitignore` dosyamızda `wordlists/generated/` ve `logs/` tanımlıdır. Ürettiğiniz hiçbir özel liste veya hedef verisi asla GitHub'a gitmez; yalnızca sizin bilgisayarınızda yerel olarak kalır.

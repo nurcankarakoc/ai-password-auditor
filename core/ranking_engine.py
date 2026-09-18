@@ -47,8 +47,8 @@ class RankingEngine:
                 self.effective_relations.append((p1, p2))
 
         # AI veya akıllı sezgisel modelden hedefe özel semantik kökleri al
-        from ai.provider_gemini import GeminiAIProvider
-        provider = GeminiAIProvider()
+        from ai.ai_manager import get_active_ai_provider
+        provider = get_active_ai_provider()
         self.semantic_roots = provider.generate_semantic_password_roots(profile)
 
         # İlgi alanı/kişilik çağrışım kelimeleri (örn: kahve -> latte) de kök gibi işlenir:
