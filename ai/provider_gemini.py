@@ -40,22 +40,51 @@ class GeminiAIProvider(BaseAIProvider):
     """Google Gemini modellerini kullanarak OSINT verisini yapılandıran sağlayıcı."""
 
     def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-flash-latest") -> None:
-        key = api_key or settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
-        super().__init__(api_key=key)
+        if api_key:
+            self._keys: list = [api_key]
+        elif settings.gemini_api_keys:
+            self._keys = list(settings.gemini_api_keys)
+        elif settings.gemini_api_key:
+            self._keys = [settings.gemini_api_key]
+        elif os.getenv("GEMINI_API_KEY"):
+            self._keys = [os.getenv("GEMINI_API_KEY")]
+        else:
+            self._keys = []
+
+        self._key_index = 0
+        super().__init__(api_key=self._keys[0] if self._keys else None)
         self.model_name = model_name
         self._client = None
         self.client_init_error: Optional[str] = None
 
         if self.api_key:
-            try:
-                from google import genai
-                self._client = genai.Client(api_key=self.api_key)
-            except Exception as e:
-                # Bu, tekrar eden bir istek hatası değil — istemci hiç kurulamadı demektir
-                # (bozuk anahtar formatı, SDK sorunu vb.). Sessiz kalırsa kullanıcı "Gemini
-                # Aktif" sanıp hiç fark etmeden offline motorla çalışmaya devam eder.
-                self.client_init_error = str(e)
-                logger.warning(f"Google GenAI istemcisi başlatılamadı: {e}")
+            self._init_client(self.api_key)
+
+    def _init_client(self, key: str) -> bool:
+        """Verilen anahtarla Gemini istemcisini kurar. Başarılıysa True döner."""
+        try:
+            from google import genai
+            self._client = genai.Client(api_key=key)
+            self.api_key = key
+            self.client_init_error = None
+            return True
+        except Exception as e:
+            # Bu, tekrar eden bir istek hatası değil — istemci hiç kurulamadı demektir
+            # (bozuk anahtar formatı, SDK sorunu vb.). Sessiz kalırsa kullanıcı "Gemini
+            # Aktif" sanıp hiç fark etmeden offline motorla çalışmaya devam eder.
+            self.client_init_error = str(e)
+            logger.warning(f"Google GenAI istemcisi başlatılamadı: {e}")
+            return False
+
+    def _rotate_to_next_key(self) -> bool:
+        """
+        Kota dolduğunda listedeki bir sonraki Gemini API anahtarına geçer.
+        Başka anahtar kalmadıysa (veya hiçbiri yoksa) False döner.
+        """
+        self._key_index += 1
+        if self._key_index >= len(self._keys):
+            return False
+        return self._init_client(self._keys[self._key_index])
 
     def is_available(self) -> bool:
         """API anahtarı ve istemci geçerli mi (ve şu an süreç genelinde 'düşmüş' değil mi)?"""
@@ -64,7 +93,12 @@ class GeminiAIProvider(BaseAIProvider):
     # Bu anahtar kelimeleri içeren hatalar geçici kabul edilir (sunucu yoğunluğu, zaman
     # aşımı vb.) ve birkaç kez tekrar denenir; "API anahtarı geçersiz" gibi kalıcı hatalarda
     # tekrar denemek zaman kaybı olur, o durumda tek denemede yerel modele geçilir.
-    _TRANSIENT_ERROR_HINTS = ("503", "unavailable", "timeout", "429", "resource_exhausted", "deadline")
+    _TRANSIENT_ERROR_HINTS = ("503", "unavailable", "timeout", "deadline")
+    # Kota/rate-limit hataları AYRI ele alınır: birkaç saniye içinde kendiliğinden düzelmezler
+    # (genelde günlük limit), bu yüzden 503 gibi anlık tekrar denemeye değmez — hem gereksiz
+    # bekleme olur hem de "az sonra tekrar dene" izlenimi yanlış olur.
+    _QUOTA_ERROR_HINTS = ("resource_exhausted", "quota", "429")
+    _QUOTA_COOLDOWN_SECONDS = 300  # Kota hataları normal 60sn'lik soğumadan çok daha uzun sürer.
 
     def _cascade(self, gemini_fn, local_fn, fallback_fn, label: str, gemini_retries: int = 3, retry_delay_seconds: float = 2.0):
         """
@@ -74,27 +108,54 @@ class GeminiAIProvider(BaseAIProvider):
         Teknik hata detayları sadece log dosyasına yazılır (konsolda gürültü yapmaz).
         Başarısızlık durumu süreç genelinde (tüm GeminiAIProvider nesneleri arasında)
         paylaşılır ve süreli bir soğuma sonrası otomatik olarak tekrar denenir.
-        Gemini geçici bir hata (503/timeout/rate-limit) verirse, hemen pes edip yerel
-        motora geçmek yerine kısa aralıklarla birkaç kez daha denenir — bu tür kesintiler
-        genelde birkaç saniye içinde kendiliğinden düzeliyor.
+        Gemini geçici bir hata (503/timeout) verirse, hemen pes edip yerel motora geçmek
+        yerine kısa aralıklarla birkaç kez daha denenir — bu tür kesintiler genelde birkaç
+        saniye içinde kendiliğinden düzeliyor. Kota/rate-limit (429) hataları farklıdır:
+        birkaç saniyede düzelmezler, o yüzden hemen tek denemede pes edilip kullanıcıya
+        net bir "kota doldu" mesajı gösterilir.
         """
         if self.is_available():
             last_exception: Optional[Exception] = None
-            for attempt in range(gemini_retries):
-                try:
-                    return gemini_fn()
-                except Exception as e:
-                    last_exception = e
-                    is_transient = any(hint in str(e).lower() for hint in self._TRANSIENT_ERROR_HINTS)
-                    logger.debug(f"Gemini {label} denemesi {attempt + 1}/{gemini_retries} başarısız ({e}).")
-                    if not is_transient or attempt == gemini_retries - 1:
-                        break
-                    time.sleep(retry_delay_seconds)
+            is_quota_error = False
+            while True:  # her Gemini anahtarı için bir tur
+                is_quota_error = False
+                for attempt in range(gemini_retries):
+                    try:
+                        return gemini_fn()
+                    except Exception as e:
+                        last_exception = e
+                        err_lower = str(e).lower()
+                        is_quota_error = any(hint in err_lower for hint in self._QUOTA_ERROR_HINTS)
+                        is_transient = not is_quota_error and any(hint in err_lower for hint in self._TRANSIENT_ERROR_HINTS)
+                        logger.debug(f"Gemini {label} denemesi {attempt + 1}/{gemini_retries} başarısız ({e}).")
+                        if is_quota_error or not is_transient or attempt == gemini_retries - 1:
+                            break
+                        time.sleep(retry_delay_seconds)
+
+                # Bu anahtarın kotası dolduysa ve elimizde başka bir anahtar varsa, ona
+                # geçip aynı isteği baştan deniyoruz (kısa süreli bekleme gerekmez, çünkü
+                # farklı bir anahtar/kota havuzuna geçiyoruz).
+                if is_quota_error and self._rotate_to_next_key():
+                    print_info(
+                        f"Bu Gemini API anahtarının kotası doldu, sıradaki anahtara geçiliyor "
+                        f"({self._key_index + 1}/{len(self._keys)})..."
+                    )
+                    continue
+                break
 
             logger.debug(f"Gemini {label} başarısız oldu ({last_exception}). Yerel model deneniyor.")
             if time.time() >= _provider_state["gemini_down_until"]:
-                print_info("Gemini API şu an yanıt vermiyor, yerel motora geçildi.")
-            _provider_state["gemini_down_until"] = time.time() + _DOWN_COOLDOWN_SECONDS
+                if is_quota_error:
+                    extra = " Birden fazla ücretsiz anahtar eklemek için 'apikey' komutunu tekrar kullanabilirsiniz." if len(self._keys) <= 1 else ""
+                    print_info(
+                        f"Kayıtlı {'tek ' if len(self._keys) <= 1 else 'tüm '}Gemini API anahtar{'ının' if len(self._keys) <= 1 else 'larının'} "
+                        f"kotası doldu. Yerel motora geçildi. Kota genelde birkaç saat içinde sıfırlanır.{extra}"
+                    )
+                else:
+                    print_info("Gemini API şu an yanıt vermiyor, yerel motora geçildi.")
+            _provider_state["gemini_down_until"] = time.time() + (
+                self._QUOTA_COOLDOWN_SECONDS if is_quota_error else _DOWN_COOLDOWN_SECONDS
+            )
 
         if local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]:
             try:

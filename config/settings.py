@@ -66,7 +66,11 @@ class AppSettings(BaseModel):
     wordlist: WordlistConfig = Field(default_factory=WordlistConfig)
     rules: RulesConfig = Field(default_factory=RulesConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
-    gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API Anahtarı (.env veya ortamdan)")
+    gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API Anahtarı (geriye dönük uyumluluk için: listedeki ilk anahtar)")
+    gemini_api_keys: List[str] = Field(
+        default_factory=list,
+        description="Google Gemini API anahtarları listesi. Bir anahtarın kotası dolduğunda otomatik olarak sıradakine geçilir."
+    )
 
     @field_validator("log_level")
     @classmethod
@@ -123,9 +127,17 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
             # Yapılandırma bozuksa konsola bilgi verip varsayılanlara düşeriz
             print(f"[UYARI] Konfigürasyon dosyası okunamadı ({e}). Varsayılan ayarlar yükleniyor.")
 
-    # Ortam değişkenlerinden hassas anahtarları çek
+    # Ortam değişkenlerinden hassas anahtarları çek. GEMINI_API_KEYS (çoğul, virgülle
+    # ayrılmış) varsa öncelik onundur; yoksa tekil GEMINI_API_KEY tek elemanlı liste olur.
+    env_gemini_keys = os.getenv("GEMINI_API_KEYS")
     env_gemini_key = os.getenv("GEMINI_API_KEY")
-    if env_gemini_key:
+    if env_gemini_keys:
+        key_list = [k.strip() for k in env_gemini_keys.split(",") if k.strip()]
+        if key_list:
+            data["gemini_api_keys"] = key_list
+            data["gemini_api_key"] = key_list[0]
+    elif env_gemini_key:
+        data["gemini_api_keys"] = [env_gemini_key]
         data["gemini_api_key"] = env_gemini_key
 
     env_log_level = os.getenv("SPA_LOG_LEVEL")
@@ -144,24 +156,40 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
 ENV_FILE_PATH: Path = BASE_DIR / ".env"
 
 
-def save_gemini_api_key(api_key: str) -> None:
+def save_gemini_api_key(api_key: str, replace: bool = False) -> List[str]:
     """
     Gemini API anahtarını .env dosyasına kalıcı olarak yazar (config.json GİBİ git'e
     eklenen bir dosyaya DEĞİL — .env .gitignore'da tanımlıdır, böylece anahtar asla
     yanlışlıkla commit edilmez) ve çalışan süreçteki global `settings` nesnesini günceller.
+
+    Varsayılan olarak EKLER (replace=False): birden fazla ücretsiz-katman anahtarınız
+    varsa, biri kota sınırına ulaştığında GeminiAIProvider otomatik olarak sıradakine
+    geçebilsin diye hepsi saklanır. replace=True verilirse mevcut anahtarların yerine
+    sadece bu tek anahtar yazılır.
+    Döndürülen değer: kayıtlı tüm anahtarların (bu yenisi dahil) listesi.
     """
+    existing = list(settings.gemini_api_keys) if not replace else []
+    if api_key not in existing:
+        existing.append(api_key)
+
     lines = []
     if ENV_FILE_PATH.is_file():
         with open(ENV_FILE_PATH, "r", encoding="utf-8") as f:
-            lines = [line.rstrip("\n") for line in f if not line.strip().startswith("GEMINI_API_KEY=")]
+            lines = [
+                line.rstrip("\n") for line in f
+                if not line.strip().startswith("GEMINI_API_KEY=") and not line.strip().startswith("GEMINI_API_KEYS=")
+            ]
 
-    lines.append(f"GEMINI_API_KEY={api_key}")
+    lines.append(f"GEMINI_API_KEYS={','.join(existing)}")
 
     with open(ENV_FILE_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
-    os.environ["GEMINI_API_KEY"] = api_key
-    settings.gemini_api_key = api_key
+    os.environ["GEMINI_API_KEYS"] = ",".join(existing)
+    os.environ.pop("GEMINI_API_KEY", None)
+    settings.gemini_api_keys = existing
+    settings.gemini_api_key = existing[0] if existing else None
+    return existing
 
 
 # Singleton benzeri global settings nesnesi

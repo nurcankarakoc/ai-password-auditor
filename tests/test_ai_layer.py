@@ -59,7 +59,9 @@ class TestAIProviderAbstractionAndFallback:
         from ai.local_llm_engine import local_llm_engine
         monkeypatch.setattr(local_llm_engine, "is_available", lambda: False)
         monkeypatch.setattr("config.settings.settings.gemini_api_key", None)
+        monkeypatch.setattr("config.settings.settings.gemini_api_keys", [])
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEYS", raising=False)
 
         provider = GeminiAIProvider(api_key=None)
         assert provider.is_available() is False
