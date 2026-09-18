@@ -61,7 +61,12 @@ class GeminiAIProvider(BaseAIProvider):
         """API anahtarı ve istemci geçerli mi (ve şu an süreç genelinde 'düşmüş' değil mi)?"""
         return bool(self._client and self.api_key) and time.time() >= _provider_state["gemini_down_until"]
 
-    def _cascade(self, gemini_fn, local_fn, fallback_fn, label: str):
+    # Bu anahtar kelimeleri içeren hatalar geçici kabul edilir (sunucu yoğunluğu, zaman
+    # aşımı vb.) ve birkaç kez tekrar denenir; "API anahtarı geçersiz" gibi kalıcı hatalarda
+    # tekrar denemek zaman kaybı olur, o durumda tek denemede yerel modele geçilir.
+    _TRANSIENT_ERROR_HINTS = ("503", "unavailable", "timeout", "429", "resource_exhausted", "deadline")
+
+    def _cascade(self, gemini_fn, local_fn, fallback_fn, label: str, gemini_retries: int = 3, retry_delay_seconds: float = 2.0):
         """
         Üç katmanlı yedekleme zinciri: Gemini API (varsa) -> Yerel küçük dil modeli
         (indirilmişse) -> her zaman çalışan statik kural motoru. Her katman kendinden
@@ -69,15 +74,27 @@ class GeminiAIProvider(BaseAIProvider):
         Teknik hata detayları sadece log dosyasına yazılır (konsolda gürültü yapmaz).
         Başarısızlık durumu süreç genelinde (tüm GeminiAIProvider nesneleri arasında)
         paylaşılır ve süreli bir soğuma sonrası otomatik olarak tekrar denenir.
+        Gemini geçici bir hata (503/timeout/rate-limit) verirse, hemen pes edip yerel
+        motora geçmek yerine kısa aralıklarla birkaç kez daha denenir — bu tür kesintiler
+        genelde birkaç saniye içinde kendiliğinden düzeliyor.
         """
         if self.is_available():
-            try:
-                return gemini_fn()
-            except Exception as e:
-                logger.debug(f"Gemini {label} başarısız oldu ({e}). Yerel model deneniyor.")
-                if time.time() >= _provider_state["gemini_down_until"]:
-                    print_info("Gemini API şu an yanıt vermiyor, yerel motora geçildi.")
-                _provider_state["gemini_down_until"] = time.time() + _DOWN_COOLDOWN_SECONDS
+            last_exception: Optional[Exception] = None
+            for attempt in range(gemini_retries):
+                try:
+                    return gemini_fn()
+                except Exception as e:
+                    last_exception = e
+                    is_transient = any(hint in str(e).lower() for hint in self._TRANSIENT_ERROR_HINTS)
+                    logger.debug(f"Gemini {label} denemesi {attempt + 1}/{gemini_retries} başarısız ({e}).")
+                    if not is_transient or attempt == gemini_retries - 1:
+                        break
+                    time.sleep(retry_delay_seconds)
+
+            logger.debug(f"Gemini {label} başarısız oldu ({last_exception}). Yerel model deneniyor.")
+            if time.time() >= _provider_state["gemini_down_until"]:
+                print_info("Gemini API şu an yanıt vermiyor, yerel motora geçildi.")
+            _provider_state["gemini_down_until"] = time.time() + _DOWN_COOLDOWN_SECONDS
 
         if local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]:
             try:
@@ -689,10 +706,12 @@ class GeminiAIProvider(BaseAIProvider):
                             names.add(clean_sub.capitalize())
                     continue
                 elif 'takim' in key_norm:
-                    interests.add(val.lower())
+                    if len(val) >= 2:
+                        interests.add(val.lower())
                     continue
                 elif 'sehir' in key_norm or 'konum' in key_norm:
-                    locations.add(val.capitalize())
+                    if len(val) >= 2:
+                        locations.add(val.capitalize())
                     continue
 
             # Serbest metin içindeki büyük harfli kelimeleri yakala (örn: Ahmet Yılmaz)
