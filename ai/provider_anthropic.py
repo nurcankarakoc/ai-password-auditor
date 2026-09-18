@@ -1,38 +1,30 @@
 """
-Cybzenor - Google Gemini AI Sağlayıcısı
-google-genai SDK ile Structured Output (TargetProfile) dönüşümü.
-Ortak kademeli yedekleme/anahtar rotasyonu/zenginleştirme mantığı
-ai/provider_cloud_base.py'deki CloudAIProviderBase'de yaşar.
+Cybzenor - Anthropic (Claude) AI Sağlayıcısı
+anthropic SDK ile çıkarım. Ortak kademeli yedekleme/anahtar rotasyonu/
+zenginleştirme mantığı ai/provider_cloud_base.py'deki CloudAIProviderBase'de yaşar.
 """
 
 import os
-import json
-import logging
 from typing import Optional
 from config.settings import settings
 from utils.logger import logger
 from ai.provider_cloud_base import CloudAIProviderBase
 from ai.schemas import TargetProfile
-
-# google-genai SDK'sı, "AFC kullanmayın" gibi kendi iç bilgilendirme uyarılarını
-# doğrudan konsola basar; kullanıcıya teknik gürültü olarak yansımaması için susturuyoruz.
-logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+from ai.json_utils import extract_json
 
 
-class GeminiAIProvider(CloudAIProviderBase):
-    """Google Gemini modellerini kullanarak OSINT verisini yapılandıran sağlayıcı."""
+class AnthropicProvider(CloudAIProviderBase):
+    """Anthropic Claude modellerini kullanarak OSINT verisini yapılandıran sağlayıcı."""
 
-    PROVIDER_LABEL = "Gemini"
+    PROVIDER_LABEL = "Anthropic"
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-flash-latest") -> None:
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "claude-haiku-4-5-20251001") -> None:
         if api_key:
             self._keys: list = [api_key]
-        elif settings.gemini_api_keys:
-            self._keys = list(settings.gemini_api_keys)
-        elif settings.gemini_api_key:
-            self._keys = [settings.gemini_api_key]
-        elif os.getenv("GEMINI_API_KEY"):
-            self._keys = [os.getenv("GEMINI_API_KEY")]
+        elif settings.anthropic_api_keys:
+            self._keys = list(settings.anthropic_api_keys)
+        elif os.getenv("ANTHROPIC_API_KEY"):
+            self._keys = [os.getenv("ANTHROPIC_API_KEY")]
         else:
             self._keys = []
 
@@ -46,23 +38,33 @@ class GeminiAIProvider(CloudAIProviderBase):
             self._init_client(self.api_key)
 
     def _init_client(self, key: str) -> bool:
-        """Verilen anahtarla Gemini istemcisini kurar. Başarılıysa True döner."""
+        """Verilen anahtarla Anthropic istemcisini kurar. Başarılıysa True döner."""
         try:
-            from google import genai
-            self._client = genai.Client(api_key=key)
+            import anthropic
+            self._client = anthropic.Anthropic(api_key=key)
             self.api_key = key
             self.client_init_error = None
             return True
         except Exception as e:
-            # Bu, tekrar eden bir istek hatası değil — istemci hiç kurulamadı demektir
-            # (bozuk anahtar formatı, SDK sorunu vb.). Sessiz kalırsa kullanıcı "Gemini
-            # Aktif" sanıp hiç fark etmeden offline motorla çalışmaya devam eder.
             self.client_init_error = str(e)
-            logger.warning(f"Google GenAI istemcisi başlatılamadı: {e}")
+            logger.warning(f"Anthropic istemcisi başlatılamadı: {e}")
             return False
 
+    def _chat_json(self, prompt: str, max_tokens: int = 1500):
+        """
+        Anthropic'te OpenAI tarzı katı JSON-modu yok; prompt açıkça 'SADECE JSON'
+        talimatı içerir ve yanıt regex tabanlı extract_json ile ayrıştırılır
+        (yerel LLM motorunun zaten kanıtlanmış aynı yöntemi).
+        """
+        response = self._client.messages.create(
+            model=self.model_name,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt + "\n\nYanıtı SADECE geçerli JSON olarak ver, başka hiçbir metin ekleme."}],
+        )
+        text = "".join(block.text for block in response.content if hasattr(block, "text"))
+        return extract_json(text)
+
     def _extract_via_cloud(self, raw_text: str) -> TargetProfile:
-        """Gemini Structured Output API ile kesin JSON formatında profil çıkarır."""
         prompt = (
             "Aşağıdaki dağınık metinden bir kişi/kurum hakkındaki bilgileri tespit et ve JSON şemasına göre doldur.\n"
             "- names: Hedef kişi, eşi, çocuğu, evcil hayvanı vb. isimler (Türkçe karakterleri koru).\n"
@@ -72,28 +74,18 @@ class GeminiAIProvider(CloudAIProviderBase):
             "özellikleri (örn: 'fenerbahce', 'gitar', 'kahve', 'neseli', 'sakin').\n"
             "- relations: İlişkili isim çiftleri (örn: [['Ali', 'Ayse']]).\n"
             "- keywords: Özel takma adlar, şirket, lakaplar.\n\n"
-            f"İncelenecek Metin:\n\"\"\"\n{raw_text}\n\"\"\""
+            f"İncelenecek Metin:\n\"\"\"\n{raw_text}\n\"\"\"\n\n"
+            'Yanıtı TAM OLARAK şu JSON şemasıyla ver: '
+            '{"names": [], "dates": [], "locations": [], "interests": [], "relations": [], "keywords": []}'
         )
-
-        response = self._client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": TargetProfile,
-            },
-        )
-
-        if hasattr(response, "text") and response.text:
-            data = json.loads(response.text)
-            return TargetProfile(**data)
-        elif hasattr(response, "parsed") and response.parsed:
-            return response.parsed
-        else:
-            raise ValueError("Gemini geçerli bir yapılandırılmış yanıt döndüremedi.")
+        data = self._chat_json(prompt)
+        if isinstance(data, dict):
+            allowed_fields = set(TargetProfile.model_fields.keys())
+            clean_data = {k: v for k, v in data.items() if k in allowed_fields}
+            return TargetProfile(**clean_data)
+        raise ValueError("Anthropic geçerli bir yapılandırılmış yanıt döndürmedi.")
 
     def _generate_roots_via_cloud(self, profile: TargetProfile) -> list[str]:
-        """Gemini ile hedefin psikolojisine ve takımlarına göre anlamsal kökler üretir."""
         prompt = (
             f"Sen bir siber güvenlik denetim uzmanısın. Aşağıdaki hedef profilini analiz et:\n"
             f"- İsimler: {profile.names}\n"
@@ -110,19 +102,11 @@ class GeminiAIProvider(CloudAIProviderBase):
             f"4. İsimleri evcil hayvanla, doğum yılıyla, sevdiği renkle mantıklı birleştir (örn: 'ahmet_bjk', 'pamuk2007', 'ahmet1903', 'Bjk.Ahmet').\n"
             f"Yanıtı SADECE JSON formatında bir string listesi olarak ver: [\"kalip1\", \"kalip2\", ...]"
         )
-
-        response = self._client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"}
-        )
-
-        if hasattr(response, "text") and response.text:
-            data = json.loads(response.text)
-            if isinstance(data, list):
-                return [str(x).strip() for x in data if str(x).strip()]
-            elif isinstance(data, dict) and "passwords" in data:
-                return [str(x).strip() for x in data["passwords"] if str(x).strip()]
+        data = self._chat_json(prompt, max_tokens=2000)
+        if isinstance(data, list):
+            cleaned = [str(x).strip() for x in data if str(x).strip()]
+            if cleaned:
+                return cleaned
         return self._generate_roots_via_heuristic(profile)
 
     def _expand_associations_via_cloud(self, term: str) -> list[str]:
@@ -134,17 +118,11 @@ class GeminiAIProvider(CloudAIProviderBase):
             f"'neseli' -> enerji, pembe, gulen, mutlu, nese.\n"
             f"Yanıtı SADECE JSON string listesi olarak ver: [\"kelime1\", \"kelime2\", ...]"
         )
-        response = self._client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"}
-        )
-        if hasattr(response, "text") and response.text:
-            data = json.loads(response.text)
-            if isinstance(data, list):
-                values = [str(x).strip() for x in data if str(x).strip()]
-                if values:
-                    return values
+        data = self._chat_json(prompt)
+        if isinstance(data, list):
+            cleaned = [str(x).strip() for x in data if str(x).strip()]
+            if cleaned:
+                return cleaned
         return self._expand_associations_heuristic(term)
 
     def _infer_via_cloud(self, category: str, profile: TargetProfile) -> list[str]:
@@ -160,17 +138,11 @@ class GeminiAIProvider(CloudAIProviderBase):
             f"(örn. kategori 'evcil hayvan ismi' ise Türkiye'de en yaygın köpek/kedi isimlerini öner).\n"
             f"Yanıtı SADECE JSON formatında bir string listesi olarak ver: [\"deger1\", \"deger2\", ...]"
         )
-        response = self._client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"}
-        )
-        if hasattr(response, "text") and response.text:
-            data = json.loads(response.text)
-            if isinstance(data, list):
-                values = [str(x).strip() for x in data if str(x).strip()]
-                if values:
-                    return values
+        data = self._chat_json(prompt)
+        if isinstance(data, list):
+            cleaned = [str(x).strip() for x in data if str(x).strip()]
+            if cleaned:
+                return cleaned
         return self._infer_via_heuristic(category)
 
     def _detect_unknown_categories_via_cloud(self, raw_text: str) -> list[str]:
@@ -183,13 +155,7 @@ class GeminiAIProvider(CloudAIProviderBase):
             f"(örn: [\"pet\", \"nickname\"]). Hiçbiri yoksa boş liste [] ver.\n\n"
             f"Metin:\n\"\"\"\n{raw_text}\n\"\"\""
         )
-        response = self._client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"}
-        )
-        if hasattr(response, "text") and response.text:
-            data = json.loads(response.text)
-            if isinstance(data, list):
-                return [str(x).strip() for x in data if str(x).strip() in valid_keys]
+        data = self._chat_json(prompt)
+        if isinstance(data, list):
+            return [str(x).strip() for x in data if str(x).strip() in valid_keys]
         return []

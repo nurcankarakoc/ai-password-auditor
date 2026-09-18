@@ -497,29 +497,59 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
         maybe_pause()
         return True
 
-    # 9b. Gemini API anahtarı ekleme/güncelleme (apikey)
+    # 9b. AI API anahtarı ekleme/güncelleme (apikey) — Gemini/OpenAI/Anthropic
     if cmd in ["apikey", "api-key", "anahtar"]:
-        from config.settings import settings, save_gemini_api_key
+        from config.settings import settings, save_ai_api_key, detect_provider_from_key
 
         def _mask(k: str) -> str:
             return f"{k[:6]}...{k[-4:]}" if len(k) >= 12 else f"{k[:2]}...{k[-1:]}"
 
-        print_header("GEMINI API ANAHTARI")
-        if settings.gemini_api_keys:
-            print(f"{Fore.LIGHTBLACK_EX}Kayıtlı {len(settings.gemini_api_keys)} anahtar:{Style.RESET_ALL}")
-            for i, k in enumerate(settings.gemini_api_keys, 1):
-                print(f"{Fore.LIGHTBLACK_EX}  [{i}] {_mask(k)}{Style.RESET_ALL}")
+        provider_labels = {"gemini": "Gemini", "openai": "OpenAI", "anthropic": "Anthropic"}
+        provider_key_fields = {
+            "gemini": settings.gemini_api_keys,
+            "openai": settings.openai_api_keys,
+            "anthropic": settings.anthropic_api_keys,
+        }
+
+        print_header("AI API ANAHTARI")
+        any_registered = any(provider_key_fields.values())
+        if any_registered:
+            for provider, keys in provider_key_fields.items():
+                if not keys:
+                    continue
+                print(f"{Fore.LIGHTBLACK_EX}{provider_labels[provider]} — {len(keys)} anahtar:{Style.RESET_ALL}")
+                for i, k in enumerate(keys, 1):
+                    print(f"{Fore.LIGHTBLACK_EX}  [{i}] {_mask(k)}{Style.RESET_ALL}")
             print(
-                f"{Fore.LIGHTBLACK_EX}Not: Yeni bir anahtar girersen mevcutların YERİNE değil, YANINA eklenir — "
-                f"biri kota sınırına ulaştığında otomatik olarak sıradakine geçilir.{Style.RESET_ALL}"
+                f"{Fore.LIGHTBLACK_EX}Not: Yeni bir anahtar girersen aynı sağlayıcıdaki mevcutların YERİNE değil, "
+                f"YANINA eklenir — biri kota sınırına ulaştığında otomatik olarak sıradakine geçilir. Gemini önceliklidir; "
+                f"OpenAI/Anthropic sadece Gemini kullanılamadığında devreye girer.{Style.RESET_ALL}"
             )
-        print(f"{Fore.LIGHTBLACK_EX}Ücretsiz anahtar almak için: https://aistudio.google.com/apikey{Style.RESET_ALL}")
-        new_key = input(f"{Fore.GREEN}Yeni Gemini API anahtarınızı yapıştırın [ENTER = vazgeç]: {Style.RESET_ALL}").strip()
-        if new_key:
-            all_keys = save_gemini_api_key(new_key)
-            print_success(f"API anahtarı kaydedildi (toplam {len(all_keys)} anahtar). AI özellikleri Gemini üzerinden çalışacak.")
-        else:
+        print(f"{Fore.LIGHTBLACK_EX}Ücretsiz Gemini anahtarı: https://aistudio.google.com/apikey{Style.RESET_ALL}")
+        print(f"{Fore.LIGHTBLACK_EX}Gemini, OpenAI veya Anthropic anahtarlarından herhangi birini yapıştırabilirsiniz — "
+              f"hangisine ait olduğu otomatik tanınır.{Style.RESET_ALL}")
+        new_key = input(f"{Fore.GREEN}Yeni AI API anahtarınızı yapıştırın [ENTER = vazgeç]: {Style.RESET_ALL}").strip()
+        if not new_key:
             print_info("İşlem iptal edildi.")
+            maybe_pause()
+            return True
+
+        provider = detect_provider_from_key(new_key)
+        if not provider:
+            print_warning("Anahtarın hangi servise ait olduğu formatından anlaşılamadı.")
+            choice = input(
+                f"{Fore.GREEN}Servisi seçin: [1] Gemini  [2] OpenAI  [3] Anthropic  [ENTER = vazgeç]: {Style.RESET_ALL}"
+            ).strip()
+            provider = {"1": "gemini", "2": "openai", "3": "anthropic"}.get(choice)
+            if not provider:
+                print_info("İşlem iptal edildi.")
+                maybe_pause()
+                return True
+
+        all_keys = save_ai_api_key(new_key, provider)
+        print_success(
+            f"{provider_labels[provider]} API anahtarı kaydedildi (bu sağlayıcıda toplam {len(all_keys)} anahtar)."
+        )
         maybe_pause()
         return True
 

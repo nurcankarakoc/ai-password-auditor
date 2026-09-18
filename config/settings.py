@@ -71,6 +71,14 @@ class AppSettings(BaseModel):
         default_factory=list,
         description="Google Gemini API anahtarları listesi. Bir anahtarın kotası dolduğunda otomatik olarak sıradakine geçilir."
     )
+    openai_api_keys: List[str] = Field(
+        default_factory=list,
+        description="OpenAI (ChatGPT) API anahtarları listesi. Gemini kullanılamadığında yedek sağlayıcı olarak devreye girer."
+    )
+    anthropic_api_keys: List[str] = Field(
+        default_factory=list,
+        description="Anthropic (Claude) API anahtarları listesi. Gemini kullanılamadığında yedek sağlayıcı olarak devreye girer."
+    )
 
     @field_validator("log_level")
     @classmethod
@@ -127,18 +135,24 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
             # Yapılandırma bozuksa konsola bilgi verip varsayılanlara düşeriz
             print(f"[UYARI] Konfigürasyon dosyası okunamadı ({e}). Varsayılan ayarlar yükleniyor.")
 
-    # Ortam değişkenlerinden hassas anahtarları çek. GEMINI_API_KEYS (çoğul, virgülle
-    # ayrılmış) varsa öncelik onundur; yoksa tekil GEMINI_API_KEY tek elemanlı liste olur.
-    env_gemini_keys = os.getenv("GEMINI_API_KEYS")
-    env_gemini_key = os.getenv("GEMINI_API_KEY")
-    if env_gemini_keys:
-        key_list = [k.strip() for k in env_gemini_keys.split(",") if k.strip()]
-        if key_list:
-            data["gemini_api_keys"] = key_list
-            data["gemini_api_key"] = key_list[0]
-    elif env_gemini_key:
-        data["gemini_api_keys"] = [env_gemini_key]
-        data["gemini_api_key"] = env_gemini_key
+    # Ortam değişkenlerinden hassas anahtarları çek. {PREFIX}_API_KEYS (çoğul, virgülle
+    # ayrılmış) varsa öncelik onundur; yoksa tekil {PREFIX}_API_KEY tek elemanlı liste olur.
+    # Üç sağlayıcı (Gemini, OpenAI, Anthropic) için aynı desen tekrarlanır.
+    for env_prefix, settings_field in (
+        ("GEMINI", "gemini_api_keys"), ("OPENAI", "openai_api_keys"), ("ANTHROPIC", "anthropic_api_keys")
+    ):
+        env_keys = os.getenv(f"{env_prefix}_API_KEYS")
+        env_key = os.getenv(f"{env_prefix}_API_KEY")
+        if env_keys:
+            key_list = [k.strip() for k in env_keys.split(",") if k.strip()]
+            if key_list:
+                data[settings_field] = key_list
+        elif env_key:
+            data[settings_field] = [env_key]
+
+    # gemini_api_key (tekil) geriye dönük uyumluluk alanı: listedeki ilk anahtar.
+    if data.get("gemini_api_keys"):
+        data["gemini_api_key"] = data["gemini_api_keys"][0]
 
     env_log_level = os.getenv("SPA_LOG_LEVEL")
     if env_log_level:
@@ -156,40 +170,78 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
 ENV_FILE_PATH: Path = BASE_DIR / ".env"
 
 
-def save_gemini_api_key(api_key: str, replace: bool = False) -> List[str]:
+# Sağlayıcı adı -> (settings alanı, .env değişken öneki) eşlemesi.
+_PROVIDER_FIELD_MAP = {
+    "gemini": ("gemini_api_keys", "GEMINI"),
+    "openai": ("openai_api_keys", "OPENAI"),
+    "anthropic": ("anthropic_api_keys", "ANTHROPIC"),
+}
+
+
+def detect_provider_from_key(api_key: str) -> Optional[str]:
     """
-    Gemini API anahtarını .env dosyasına kalıcı olarak yazar (config.json GİBİ git'e
-    eklenen bir dosyaya DEĞİL — .env .gitignore'da tanımlıdır, böylece anahtar asla
-    yanlışlıkla commit edilmez) ve çalışan süreçteki global `settings` nesnesini günceller.
+    Bir API anahtarının biçiminden hangi sağlayıcıya ait olduğunu tahmin eder.
+    - Anthropic: 'sk-ant-' ile başlar (OpenAI'nin 'sk-' önekinin üst kümesi
+      olduğu için ÖNCE kontrol edilmeli).
+    - OpenAI: 'sk-' ile başlar.
+    - Gemini: 'AIzaSy' (klasik format) veya 'AQ.' (bu oturumda doğrulanan
+      yeni format) ile başlar.
+    Hiçbiri eşleşmezse None döner (çağıran taraf kullanıcıya sorar).
+    """
+    key = api_key.strip()
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith("sk-"):
+        return "openai"
+    if key.startswith("AIzaSy") or key.startswith("AQ."):
+        return "gemini"
+    return None
+
+
+def save_ai_api_key(api_key: str, provider: str, replace: bool = False) -> List[str]:
+    """
+    Verilen sağlayıcının ('gemini'/'openai'/'anthropic') API anahtarını .env dosyasına
+    kalıcı olarak yazar (config.json GİBİ git'e eklenen bir dosyaya DEĞİL — .env
+    .gitignore'da tanımlıdır, böylece anahtar asla yanlışlıkla commit edilmez) ve
+    çalışan süreçteki global `settings` nesnesini günceller.
 
     Varsayılan olarak EKLER (replace=False): birden fazla ücretsiz-katman anahtarınız
-    varsa, biri kota sınırına ulaştığında GeminiAIProvider otomatik olarak sıradakine
+    varsa, biri kota sınırına ulaştığında ilgili provider otomatik olarak sıradakine
     geçebilsin diye hepsi saklanır. replace=True verilirse mevcut anahtarların yerine
     sadece bu tek anahtar yazılır.
-    Döndürülen değer: kayıtlı tüm anahtarların (bu yenisi dahil) listesi.
+    Döndürülen değer: bu sağlayıcı için kayıtlı tüm anahtarların (bu yenisi dahil) listesi.
     """
-    existing = list(settings.gemini_api_keys) if not replace else []
+    settings_field, env_prefix = _PROVIDER_FIELD_MAP[provider]
+    existing = list(getattr(settings, settings_field)) if not replace else []
     if api_key not in existing:
         existing.append(api_key)
 
+    keys_var = f"{env_prefix}_API_KEYS"
+    key_var = f"{env_prefix}_API_KEY"
     lines = []
     if ENV_FILE_PATH.is_file():
         with open(ENV_FILE_PATH, "r", encoding="utf-8") as f:
             lines = [
                 line.rstrip("\n") for line in f
-                if not line.strip().startswith("GEMINI_API_KEY=") and not line.strip().startswith("GEMINI_API_KEYS=")
+                if not line.strip().startswith(f"{key_var}=") and not line.strip().startswith(f"{keys_var}=")
             ]
 
-    lines.append(f"GEMINI_API_KEYS={','.join(existing)}")
+    lines.append(f"{keys_var}={','.join(existing)}")
 
     with open(ENV_FILE_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
-    os.environ["GEMINI_API_KEYS"] = ",".join(existing)
-    os.environ.pop("GEMINI_API_KEY", None)
-    settings.gemini_api_keys = existing
-    settings.gemini_api_key = existing[0] if existing else None
+    os.environ[keys_var] = ",".join(existing)
+    os.environ.pop(key_var, None)
+    setattr(settings, settings_field, existing)
+    if provider == "gemini":
+        settings.gemini_api_key = existing[0] if existing else None
     return existing
+
+
+def save_gemini_api_key(api_key: str, replace: bool = False) -> List[str]:
+    """Geriye dönük uyumluluk sarmalayıcısı: save_ai_api_key(api_key, 'gemini')."""
+    return save_ai_api_key(api_key, "gemini", replace=replace)
 
 
 # Singleton benzeri global settings nesnesi

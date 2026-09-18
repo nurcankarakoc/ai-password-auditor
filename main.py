@@ -41,17 +41,18 @@ def display_system_status() -> None:
     print(f" • Maksimum Aday Limiti   : {settings.wordlist.max_candidates:,}")
     print(f" • Log Seviyesi / Maskele : {settings.log_level} / {'Aktif' if settings.mask_sensitive_data else 'Pasif'}")
     print(f" • Güvenlik Hata Eşiği    : {settings.safety.max_consecutive_failures} ardışık deneme")
-    # settings.gemini_api_key'in salt VAR OLMASI yerine gerçek provider durumuna bakılır —
-    # anahtar hatalıysa (istemci kurulamadıysa) ya da Gemini bu oturumda geçici olarak
-    # "düşmüş" işaretliyse, ekran yanlışlıkla "Aktif" göstermesin.
-    from ai.provider_gemini import GeminiAIProvider as _GeminiCheck
-    _ai_check = _GeminiCheck()
+    # Anahtarın salt VAR OLMASI yerine gerçek provider durumuna bakılır — anahtar
+    # hatalıysa (istemci kurulamadıysa) ya da sağlayıcı bu oturumda geçici olarak
+    # "düşmüş" işaretliyse, ekran yanlışlıkla "Aktif" göstermesin. Gemini/OpenAI/
+    # Anthropic'ten hangisi aktifse (veya anahtarı varsa) o gösterilir.
+    from ai.ai_manager import get_active_ai_provider, any_cloud_ai_configured
+    _ai_check = get_active_ai_provider()
     if _ai_check.is_available():
-        ai_status = f"{Fore.GREEN}Gemini API Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
-    elif settings.gemini_api_key and _ai_check.client_init_error:
-        ai_status = f"{Fore.RED}Gemini anahtarı geçersiz/başlatılamadı — 'apikey' ile güncelleyin{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
-    elif settings.gemini_api_key:
-        ai_status = f"{Fore.YELLOW}Gemini şu an yanıt vermiyor, offline motor devrede{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+        ai_status = f"{Fore.GREEN}{_ai_check.PROVIDER_LABEL} API Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    elif _ai_check._keys and _ai_check.client_init_error:
+        ai_status = f"{Fore.RED}{_ai_check.PROVIDER_LABEL} anahtarı geçersiz/başlatılamadı — 'apikey' ile güncelleyin{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    elif any_cloud_ai_configured():
+        ai_status = f"{Fore.YELLOW}{_ai_check.PROVIDER_LABEL} şu an yanıt vermiyor, offline motor devrede{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     else:
         ai_status = f"{Fore.YELLOW}Offline Motor (API key yok — 'apikey' yazarak ekleyebilirsiniz){Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     print(f" • AI Motoru              : {ai_status}")
@@ -399,7 +400,8 @@ def handle_default_wordlist_operations() -> None:
             pause_prompt()
 
 
-from ai.provider_gemini import GeminiAIProvider
+from ai.ai_manager import get_active_ai_provider
+from ai.base import BaseAIProvider
 from core.ranking_engine import RankingEngine
 from ai.schemas import TargetProfile, PasswordPolicy
 
@@ -439,10 +441,10 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     # 5. Özel Kelimeler / Renk / Lakap
     print(f"\n{Fore.CYAN}5. Özel Kelimeler, Sevdiği Renk veya Lakap:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: mor, mavi, yazılımcı, kartal{Style.RESET_ALL}")
-    # settings.gemini_api_key'in VAR OLMASI yerine provider'ın gerçek has_real_ai()
-    # kontrolüne bakılır — anahtar geçersizse veya Gemini şu an düşmüşse (soğuma
-    # süresinde) de bu uyarı doğru şekilde gösterilsin.
-    if not GeminiAIProvider().has_real_ai():
+    # Anahtarın VAR OLMASI yerine provider'ın gerçek has_real_ai() kontrolüne bakılır —
+    # anahtar geçersizse veya tüm bulut sağlayıcılar şu an düşmüşse (soğuma süresinde)
+    # de bu uyarı doğru şekilde gösterilsin.
+    if not get_active_ai_provider().has_real_ai():
         print(f"{Fore.YELLOW}   Not: AI aktif değil (bkz. 'apikey' komutu) — sistem kelime TAHMİN ETMEYECEK,")
         print(f"   sadece burada bizzat yazdığınız kelimeleri kullanacak. Aklınıza gelen her şeyi girin.{Style.RESET_ALL}")
     kw_input = input(f"{Fore.GREEN}   > Özel Kelimeler: {Style.RESET_ALL}").strip()
@@ -459,15 +461,15 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
 
     association_words: List[str] = []
     if free_text:
-        provider = GeminiAIProvider()
+        provider = get_active_ai_provider()
         print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         parsed_extra = provider.extract_target_profile(free_text)
 
         # Kota/kesinti tam BU çağrı sırasında ortaya çıkmış olabilir (bir öncekinde
-        # Gemini hâlâ aktifti). O yüzden teklif çağrıdan SONRA yapılır, ki mesajı
+        # sağlayıcı hâlâ aktifti). O yüzden teklif çağrıdan SONRA yapılır, ki mesajı
         # gören kullanıcı orada hemen anahtar ekleyebilsin.
         was_down = not provider.is_available()
-        provider = _offer_api_key_if_gemini_down(context="bu metni daha isabetli analiz etmek için")
+        provider = _offer_api_key_if_ai_down(context="bu metni daha isabetli analiz etmek için")
         if was_down and provider.is_available():
             print_info("Yeni anahtarla metin tekrar (ve daha isabetli şekilde) analiz ediliyor...")
             parsed_extra = provider.extract_target_profile(free_text)
@@ -677,10 +679,10 @@ def handle_targeted_wordlist_generation() -> None:
                 f"Daha kapsamlı sonuç için isim/tarih/ilgi alanı gibi ek bilgiler girmeyi deneyin."
             )
 
-        # Üretim sırasında Gemini'nin kotası dolmuş/kullanılamaz olabilir (yukarıdaki
-        # loglarda görülür). Kullanıcı hemen burada, bir sonraki üretim için yeni bir
-        # anahtar ekleyebilsin diye tekrar sormadan önce fırsat sunulur.
-        _offer_api_key_if_gemini_down(context="sonraki üretimlerde daha iyi sonuç almak için")
+        # Üretim sırasında aktif AI sağlayıcının kotası dolmuş/kullanılamaz olabilir
+        # (yukarıdaki loglarda görülür). Kullanıcı hemen burada, bir sonraki üretim
+        # için yeni bir anahtar ekleyebilsin diye tekrar sormadan önce fırsat sunulur.
+        _offer_api_key_if_ai_down(context="sonraki üretimlerde daha iyi sonuç almak için")
 
         save_target_profile_to_disk(profile)
 
@@ -1405,15 +1407,16 @@ def exit_application() -> NoReturn:
     sys.exit(0)
 
 
-def _offer_api_key_if_gemini_down(context: str) -> "GeminiAIProvider":
+def _offer_api_key_if_ai_down(context: str) -> "BaseAIProvider":
     """
-    Gemini kullanılamıyorsa (hiç anahtar yok, kota dolmuş, geçici kesinti) kullanıcıya
-    hemen orada (yeni/ek) bir anahtar ekleme fırsatı sunar ve güncel bir provider döner.
-    Gemini zaten çalışıyorsa hiçbir şey sormadan sadece bir provider döner.
+    Hiçbir bulut AI sağlayıcısı (Gemini/OpenAI/Anthropic) kullanılamıyorsa (hiç anahtar
+    yok, kota dolmuş, geçici kesinti) kullanıcıya hemen orada (yeni/ek) bir anahtar
+    ekleme fırsatı sunar ve güncel bir provider döner. Zaten çalışan bir sağlayıcı
+    varsa hiçbir şey sormadan sadece onu döner.
 
     context: kullanıcıya gösterilecek kısa açıklama, örn. "bu metni analiz etmek için".
     """
-    provider = GeminiAIProvider()
+    provider = get_active_ai_provider()
     if provider.is_available():
         return provider
 
@@ -1421,13 +1424,13 @@ def _offer_api_key_if_gemini_down(context: str) -> "GeminiAIProvider":
         "hiç API anahtarı eklenmemiş" if not provider._keys
         else "mevcut anahtar(lar) şu an kullanılamıyor (kota dolmuş veya geçici kesinti olabilir)"
     )
-    print_warning(f"Gemini şu an aktif değil ({reason}) — yerel/basit motorla daha zayıf sonuç alabilirsiniz.")
-    want_key = input(f"{Fore.GREEN}Şimdi (yeni/ek) bir Gemini API anahtarı eklemek ister misiniz, {context}? [E/h]: {Style.RESET_ALL}").strip().lower()
+    print_warning(f"{provider.PROVIDER_LABEL} şu an aktif değil ({reason}) — yerel/basit motorla daha zayıf sonuç alabilirsiniz.")
+    want_key = input(f"{Fore.GREEN}Şimdi (yeni/ek) bir AI API anahtarı eklemek ister misiniz (Gemini/OpenAI/Anthropic), {context}? [E/h]: {Style.RESET_ALL}").strip().lower()
     if want_key in ('e', 'evet', 'y', 'yes'):
         execute_fast_command("apikey", pause=False)
-        provider = GeminiAIProvider()  # yeni anahtarla yeniden oluştur
+        provider = get_active_ai_provider()  # yeni anahtarla yeniden oluştur
         if provider.is_available():
-            print_success("Anahtar eklendi, Gemini kullanılacak.")
+            print_success(f"Anahtar eklendi, {provider.PROVIDER_LABEL} kullanılacak.")
         else:
             print_info("Anahtar eklenemedi/hâlâ kullanılamıyor, alternatif motorla devam ediliyor.")
     return provider
@@ -1435,23 +1438,25 @@ def _offer_api_key_if_gemini_down(context: str) -> "GeminiAIProvider":
 
 def _offer_api_key_setup_if_missing() -> None:
     """
-    Gemini API anahtarı tanımlı değilse, kullanıcıya program başlarken bir kerelik
+    Hiçbir AI API anahtarı tanımlı değilse, kullanıcıya program başlarken bir kerelik
     'şimdi eklemek ister misin?' teklifi sunar. Bu, sadece 'apikey' komutunu bilmesini
     beklemek yerine daha iyi bir ilk deneyim (onboarding) sağlar. İstemezse hiçbir şeyi
     bloklamaz, aracın geri kalanı offline motorla normal şekilde çalışmaya devam eder.
     """
-    if settings.gemini_api_key:
+    from ai.ai_manager import any_cloud_ai_configured
+    if any_cloud_ai_configured():
         return
 
     clear_screen()
     print_banner(version=settings.version)
     print_header("YAPAY ZEKA KURULUMU (İsteğe Bağlı ama Önerilir)")
     print("Cybzenor, hedef profilleri anlamak ve daha isabetli parola tahminleri üretmek için")
-    print("Google Gemini API kullanabilir. Anahtar olmadan da çalışır (offline kural motoru),")
-    print("ama Gemini ile sonuçlar belirgin şekilde daha akıllı olur.\n")
-    print(f"{Fore.LIGHTBLACK_EX}Ücretsiz anahtar almak için: https://aistudio.google.com/apikey{Style.RESET_ALL}\n")
+    print("Google Gemini, OpenAI (ChatGPT) veya Anthropic (Claude) API'lerinden birini kullanabilir.")
+    print("Anahtar olmadan da çalışır (offline kural motoru), ama bir AI anahtarıyla sonuçlar")
+    print("belirgin şekilde daha akıllı olur. Gemini'nin kalıcı ücretsiz katmanı vardır.\n")
+    print(f"{Fore.LIGHTBLACK_EX}Ücretsiz Gemini anahtarı: https://aistudio.google.com/apikey{Style.RESET_ALL}\n")
 
-    choice = input(f"{Fore.GREEN}Şimdi Gemini API anahtarınızı eklemek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
+    choice = input(f"{Fore.GREEN}Şimdi bir AI API anahtarı eklemek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
     if choice in ('e', 'evet', 'y', 'yes'):
         execute_fast_command("apikey", pause=False)
     else:
