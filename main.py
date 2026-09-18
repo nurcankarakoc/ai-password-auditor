@@ -459,22 +459,7 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
 
     association_words: List[str] = []
     if free_text:
-        provider = GeminiAIProvider()
-        # Gemini özellikle kontrol edilir (yerel model teknik olarak "AI var" saydırsa da,
-        # kalitesi Gemini'nin belirgin şekilde gerisinde kalabiliyor — bkz. bu oturumdaki
-        # gözlemler). Gemini kullanılamıyorsa (hiç anahtar yok, kota doldu, geçici kesinti),
-        # kullanıcıya daha iyi sonuç için hemen bir anahtar ekleme fırsatı sunulur.
-        if not provider.is_available():
-            reason = "hiç API anahtarı eklenmemiş" if not provider._keys else "mevcut anahtar(lar) şu an kullanılamıyor (kota dolmuş veya geçici kesinti olabilir)"
-            print_warning(f"Gemini şu an aktif değil ({reason}) — yerel/basit motorla daha zayıf sonuç alabilirsiniz.")
-            want_key = input(f"{Fore.GREEN}Şimdi (yeni/ek) bir Gemini API anahtarı eklemek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
-            if want_key in ('e', 'evet', 'y', 'yes'):
-                execute_fast_command("apikey", pause=False)
-                provider = GeminiAIProvider()  # yeni anahtarla yeniden oluştur
-                if provider.is_available():
-                    print_success("Anahtar eklendi, metin Gemini ile analiz edilecek.")
-                else:
-                    print_info("Anahtar eklenemedi/hâlâ kullanılamıyor, alternatif motorla devam ediliyor.")
+        provider = _offer_api_key_if_gemini_down(context="bu metni analiz etmek için")
 
         print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         parsed_extra = provider.extract_target_profile(free_text)
@@ -682,6 +667,11 @@ def handle_targeted_wordlist_generation() -> None:
                 f"({settings.wordlist.min_candidates:,}) altında kaldı — profil bilgisi az. "
                 f"Daha kapsamlı sonuç için isim/tarih/ilgi alanı gibi ek bilgiler girmeyi deneyin."
             )
+
+        # Üretim sırasında Gemini'nin kotası dolmuş/kullanılamaz olabilir (yukarıdaki
+        # loglarda görülür). Kullanıcı hemen burada, bir sonraki üretim için yeni bir
+        # anahtar ekleyebilsin diye tekrar sormadan önce fırsat sunulur.
+        _offer_api_key_if_gemini_down(context="sonraki üretimlerde daha iyi sonuç almak için")
 
         save_target_profile_to_disk(profile)
 
@@ -1404,6 +1394,34 @@ def exit_application() -> NoReturn:
     print_info("Cybzenor kapatılıyor. Güvenli çalışmalar dileriz.")
     logger.info("Uygulama kullanıcı talebiyle normal olarak kapatıldı.")
     sys.exit(0)
+
+
+def _offer_api_key_if_gemini_down(context: str) -> "GeminiAIProvider":
+    """
+    Gemini kullanılamıyorsa (hiç anahtar yok, kota dolmuş, geçici kesinti) kullanıcıya
+    hemen orada (yeni/ek) bir anahtar ekleme fırsatı sunar ve güncel bir provider döner.
+    Gemini zaten çalışıyorsa hiçbir şey sormadan sadece bir provider döner.
+
+    context: kullanıcıya gösterilecek kısa açıklama, örn. "bu metni analiz etmek için".
+    """
+    provider = GeminiAIProvider()
+    if provider.is_available():
+        return provider
+
+    reason = (
+        "hiç API anahtarı eklenmemiş" if not provider._keys
+        else "mevcut anahtar(lar) şu an kullanılamıyor (kota dolmuş veya geçici kesinti olabilir)"
+    )
+    print_warning(f"Gemini şu an aktif değil ({reason}) — yerel/basit motorla daha zayıf sonuç alabilirsiniz.")
+    want_key = input(f"{Fore.GREEN}Şimdi (yeni/ek) bir Gemini API anahtarı eklemek ister misiniz, {context}? [E/h]: {Style.RESET_ALL}").strip().lower()
+    if want_key in ('e', 'evet', 'y', 'yes'):
+        execute_fast_command("apikey", pause=False)
+        provider = GeminiAIProvider()  # yeni anahtarla yeniden oluştur
+        if provider.is_available():
+            print_success("Anahtar eklendi, Gemini kullanılacak.")
+        else:
+            print_info("Anahtar eklenemedi/hâlâ kullanılamıyor, alternatif motorla devam ediliyor.")
+    return provider
 
 
 def _offer_api_key_setup_if_missing() -> None:
