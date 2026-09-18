@@ -182,6 +182,8 @@ Yeni başlayanların en sık sorduğu soru: *"Neden direkt şifreyi yazıp aram�
 > 3. **Statik Kural/Regex Motoru** — hiçbiri kurulu değilse devreye girer, yine de hedefin takımları/isimleri/ilişkilerini makul doğrulukla ayrıştırır.
 >
 > **Kendi API anahtarınızı eklemek için:** [aistudio.google.com/apikey](https://aistudio.google.com/apikey) adresinden ücretsiz bir anahtar alın, sonra Cybzenor'da herhangi bir yerde `apikey` yazıp yapıştırın — anahtar `.env` dosyasına kaydedilir (asla GitHub'a gitmez, `.gitignore`'da tanımlıdır) ve bir daha girmenize gerek kalmaz.
+>
+> **Ücretsiz kota dolarsa ne olur?** Google'ın ücretsiz katmanı günde/dakikada sınırlı istek hakkı verir (`RESOURCE_EXHAUSTED` hatası). Cybzenor önce geçici hatalarda (sunucu yoğunluğu) birkaç kez otomatik tekrar dener; kota tamamen dolduysa `apikey` komutunu **tekrar** çalıştırıp ikinci (farklı bir Google hesabından alınmış) bir anahtar ekleyebilirsiniz — mevcut anahtarın YERİNE değil YANINA kaydedilir, ve bir anahtarın kotası dolduğunda sistem otomatik olarak sıradaki anahtara geçer. Hiç yedek anahtar yoksa (veya hepsi dolduysa) otomatik olarak yerel motora düşer.
 
 ### S: Ürettiğim wordlist'ler ve hedef bilgileri GitHub'a yüklenir mi?
 > **Cevap:** Hayır. `.gitignore` dosyamızda `wordlists/generated/` ve `logs/` tanımlıdır. Ürettiğiniz hiçbir özel liste veya hedef verisi asla GitHub'a gitmez; yalnızca sizin bilgisayarınızda yerel olarak kalır.

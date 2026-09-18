@@ -500,15 +500,24 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
     # 9b. Gemini API anahtarı ekleme/güncelleme (apikey)
     if cmd in ["apikey", "api-key", "anahtar"]:
         from config.settings import settings, save_gemini_api_key
+
+        def _mask(k: str) -> str:
+            return f"{k[:6]}...{k[-4:]}" if len(k) >= 12 else f"{k[:2]}...{k[-1:]}"
+
         print_header("GEMINI API ANAHTARI")
-        if settings.gemini_api_key:
-            masked = settings.gemini_api_key[:6] + "..." + settings.gemini_api_key[-4:]
-            print(f"{Fore.LIGHTBLACK_EX}Mevcut anahtar: {masked}{Style.RESET_ALL}")
+        if settings.gemini_api_keys:
+            print(f"{Fore.LIGHTBLACK_EX}Kayıtlı {len(settings.gemini_api_keys)} anahtar:{Style.RESET_ALL}")
+            for i, k in enumerate(settings.gemini_api_keys, 1):
+                print(f"{Fore.LIGHTBLACK_EX}  [{i}] {_mask(k)}{Style.RESET_ALL}")
+            print(
+                f"{Fore.LIGHTBLACK_EX}Not: Yeni bir anahtar girersen mevcutların YERİNE değil, YANINA eklenir — "
+                f"biri kota sınırına ulaştığında otomatik olarak sıradakine geçilir.{Style.RESET_ALL}"
+            )
         print(f"{Fore.LIGHTBLACK_EX}Ücretsiz anahtar almak için: https://aistudio.google.com/apikey{Style.RESET_ALL}")
         new_key = input(f"{Fore.GREEN}Yeni Gemini API anahtarınızı yapıştırın [ENTER = vazgeç]: {Style.RESET_ALL}").strip()
         if new_key:
-            save_gemini_api_key(new_key)
-            print_success("API anahtarı kaydedildi. Artık AI özellikleri Gemini üzerinden çalışacak.")
+            all_keys = save_gemini_api_key(new_key)
+            print_success(f"API anahtarı kaydedildi (toplam {len(all_keys)} anahtar). AI özellikleri Gemini üzerinden çalışacak.")
         else:
             print_info("İşlem iptal edildi.")
         maybe_pause()

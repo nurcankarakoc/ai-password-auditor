@@ -428,13 +428,13 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     print(f"\n{Fore.CYAN}3. Yaşanılan Şehir, Memleket veya Plaka Kodu:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: İstanbul, 34, Ankara, 06{Style.RESET_ALL}")
     loc_input = input(f"{Fore.GREEN}   > Şehir/Plaka: {Style.RESET_ALL}").strip()
-    locations = [l.strip().capitalize() for l in re.split(r'[,/&+\s]+', loc_input) if l.strip()] if loc_input else []
+    locations = [l.strip().capitalize() for l in re.split(r'[,/&+\s]+', loc_input) if len(l.strip()) >= 2] if loc_input else []
 
     # 4. Takım / Hobiler
     print(f"\n{Fore.CYAN}4. Tuttuğu Takım, Hobiler veya İlgi Alanları:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: beşiktaş, fenerbahçe, gitar, kedi{Style.RESET_ALL}")
     interest_input = input(f"{Fore.GREEN}   > Takım/Hobiler: {Style.RESET_ALL}").strip()
-    interests = [i.strip().lower() for i in re.split(r'[,/&+\s]+', interest_input) if i.strip()] if interest_input else []
+    interests = [i.strip().lower() for i in re.split(r'[,/&+\s]+', interest_input) if len(i.strip()) >= 2] if interest_input else []
 
     # 5. Özel Kelimeler / Renk / Lakap
     print(f"\n{Fore.CYAN}5. Özel Kelimeler, Sevdiği Renk veya Lakap:{Style.RESET_ALL}")
@@ -446,7 +446,7 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
         print(f"{Fore.YELLOW}   Not: AI aktif değil (bkz. 'apikey' komutu) — sistem kelime TAHMİN ETMEYECEK,")
         print(f"   sadece burada bizzat yazdığınız kelimeleri kullanacak. Aklınıza gelen her şeyi girin.{Style.RESET_ALL}")
     kw_input = input(f"{Fore.GREEN}   > Özel Kelimeler: {Style.RESET_ALL}").strip()
-    keywords = [k.strip().capitalize() for k in re.split(r'[,/&+\s]+', kw_input) if k.strip()] if kw_input else []
+    keywords = [k.strip().capitalize() for k in re.split(r'[,/&+\s]+', kw_input) if len(k.strip()) >= 2] if kw_input else []
 
     # Aşama 2: Serbest Metin / Ek Notlar Alanı
     print_header("EK HEDEF METNİ / NOTLAR (İsteğe Bağlı)")
