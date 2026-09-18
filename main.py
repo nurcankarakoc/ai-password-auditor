@@ -459,10 +459,19 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
 
     association_words: List[str] = []
     if free_text:
-        provider = _offer_api_key_if_gemini_down(context="bu metni analiz etmek için")
-
+        provider = GeminiAIProvider()
         print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         parsed_extra = provider.extract_target_profile(free_text)
+
+        # Kota/kesinti tam BU çağrı sırasında ortaya çıkmış olabilir (bir öncekinde
+        # Gemini hâlâ aktifti). O yüzden teklif çağrıdan SONRA yapılır, ki mesajı
+        # gören kullanıcı orada hemen anahtar ekleyebilsin.
+        was_down = not provider.is_available()
+        provider = _offer_api_key_if_gemini_down(context="bu metni daha isabetli analiz etmek için")
+        if was_down and provider.is_available():
+            print_info("Yeni anahtarla metin tekrar (ve daha isabetli şekilde) analiz ediliyor...")
+            parsed_extra = provider.extract_target_profile(free_text)
+
         # Mevcut verilerle birleştir
         names = sorted(list(set(names + parsed_extra.names)))
         dates = sorted(list(set(dates + parsed_extra.dates)))
