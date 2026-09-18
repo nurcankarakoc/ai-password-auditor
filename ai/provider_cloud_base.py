@@ -61,10 +61,17 @@ class CloudAIProviderBase(BaseAIProvider):
     # Bu anahtar kelimeleri içeren hatalar geçici kabul edilir (sunucu yoğunluğu, zaman
     # aşımı vb.) ve birkaç kez tekrar denenir; kalıcı hatalarda tekrar denemek zaman
     # kaybıdır, o durumda tek denemede yerel modele geçilir.
-    _TRANSIENT_ERROR_HINTS = ("503", "unavailable", "timeout", "deadline")
+    _TRANSIENT_ERROR_HINTS = ("503", "unavailable", "timeout", "deadline", "connection")
+    # Bazı SDK'lar (openai.APITimeoutError, anthropic.APITimeoutError, httpx.*Timeout) zaman
+    # aşımını mesaj metninde değil İSTİSNA SINIFI adında belirtir; bu yüzden tip adına da bakılır.
+    _TRANSIENT_EXCEPTION_TYPE_HINTS = ("timeout", "connectionerror", "connecttimeout", "readtimeout")
     # Kota/rate-limit hataları AYRI ele alınır: birkaç saniye içinde kendiliğinden düzelmezler.
     _QUOTA_ERROR_HINTS = ("resource_exhausted", "quota", "429", "rate_limit", "insufficient_quota")
     _QUOTA_COOLDOWN_SECONDS = 300
+    # Bir bulut çağrısının ağ isteği bu kadar saniye içinde yanıt vermezse zaman aşımına
+    # uğrar (SDK istemcisi kurulurken uygulanır) — aksi halde ağ takılırsa kullanıcı süresiz
+    # bekleyebilir, çünkü hiçbir istisna fırlatılmaz ve tekrar deneme/rotasyon devreye giremez.
+    _HTTP_TIMEOUT_SECONDS = 20
 
     def _cascade(self, cloud_fn, local_fn, fallback_fn, label: str, gemini_retries: int = 3, retry_delay_seconds: float = 2.0):
         """
@@ -82,8 +89,12 @@ class CloudAIProviderBase(BaseAIProvider):
                     except Exception as e:
                         last_exception = e
                         err_lower = str(e).lower()
+                        exc_type_lower = type(e).__name__.lower()
                         is_quota_error = any(hint in err_lower for hint in self._QUOTA_ERROR_HINTS)
-                        is_transient = not is_quota_error and any(hint in err_lower for hint in self._TRANSIENT_ERROR_HINTS)
+                        is_transient = not is_quota_error and (
+                            any(hint in err_lower for hint in self._TRANSIENT_ERROR_HINTS)
+                            or any(hint in exc_type_lower for hint in self._TRANSIENT_EXCEPTION_TYPE_HINTS)
+                        )
                         logger.debug(f"{self.PROVIDER_LABEL} {label} denemesi {attempt + 1}/{gemini_retries} başarısız ({e}).")
                         if is_quota_error or not is_transient or attempt == gemini_retries - 1:
                             break

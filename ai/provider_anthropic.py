@@ -41,7 +41,9 @@ class AnthropicProvider(CloudAIProviderBase):
         """Verilen anahtarla Anthropic istemcisini kurar. Başarılıysa True döner."""
         try:
             import anthropic
-            self._client = anthropic.Anthropic(api_key=key)
+            # Timeout olmadan, ağ isteği takılırsa hiçbir istisna fırlatılmaz ve
+            # kullanıcı süresiz bekler.
+            self._client = anthropic.Anthropic(api_key=key, timeout=float(self._HTTP_TIMEOUT_SECONDS))
             self.api_key = key
             self.client_init_error = None
             return True

@@ -49,7 +49,12 @@ class GeminiAIProvider(CloudAIProviderBase):
         """Verilen anahtarla Gemini istemcisini kurar. Başarılıysa True döner."""
         try:
             from google import genai
-            self._client = genai.Client(api_key=key)
+            # http_options.timeout milisaniye cinsindendir. Timeout olmadan, ağ isteği
+            # takılırsa hiçbir istisna fırlatılmaz ve kullanıcı süresiz bekler.
+            self._client = genai.Client(
+                api_key=key,
+                http_options={"timeout": self._HTTP_TIMEOUT_SECONDS * 1000},
+            )
             self.api_key = key
             self.client_init_error = None
             return True
