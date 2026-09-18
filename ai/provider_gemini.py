@@ -7,6 +7,7 @@ import os
 import re
 import json
 import logging
+import time
 from typing import Optional
 from config.settings import settings
 from utils.logger import logger
@@ -18,6 +19,14 @@ from utils.platform_helper import print_info
 # google-genai SDK'sı, "AFC kullanmayın" gibi kendi iç bilgilendirme uyarılarını
 # doğrudan konsola basar; kullanıcıya teknik gürültü olarak yansımaması için susturuyoruz.
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
+
+# Süreç genelinde PAYLAŞILAN devre kesici durumu: main.py ve RankingEngine gibi farklı
+# yerler ayrı ayrı GeminiAIProvider() nesneleri oluşturuyor. Bu bayrak nesne-bazlı olsaydı
+# (instance attribute), bir kesinti sırasında her yeni provider nesnesi Gemini'yi sıfırdan
+# tekrar deneyip zaman kaybettirirdi. Süreleri sınırlı tutuyoruz (kalıcı değil) ki geçici
+# bir kesinti düzeldiğinde birkaç dakika sonraki farklı bir işlem yine Gemini'yi deneyebilsin.
+_DOWN_COOLDOWN_SECONDS = 60
+_provider_state = {"gemini_down_until": 0.0, "local_llm_down_until": 0.0}
 
 _TR_ASCII_MAP = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
 
@@ -35,23 +44,22 @@ class GeminiAIProvider(BaseAIProvider):
         super().__init__(api_key=key)
         self.model_name = model_name
         self._client = None
-        # Bu oturumda (bu provider nesnesinin ömrü boyunca) Gemini/yerel model bir kez
-        # başarısız olduysa bir daha denenmez — aksi halde tek bir profil işleminde
-        # (kategori tespiti + her ilgi alanı için ayrı çağrışım çağrısı gibi) onlarca kez
-        # aynı 503/timeout hatasını tekrar tekrar bekleyip kullanıcıyı gereksiz yavaşlatır.
-        self._gemini_down = False
-        self._local_llm_down = False
+        self.client_init_error: Optional[str] = None
 
         if self.api_key:
             try:
                 from google import genai
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
-                logger.debug(f"Google GenAI istemcisi başlatılamadı: {e}")
+                # Bu, tekrar eden bir istek hatası değil — istemci hiç kurulamadı demektir
+                # (bozuk anahtar formatı, SDK sorunu vb.). Sessiz kalırsa kullanıcı "Gemini
+                # Aktif" sanıp hiç fark etmeden offline motorla çalışmaya devam eder.
+                self.client_init_error = str(e)
+                logger.warning(f"Google GenAI istemcisi başlatılamadı: {e}")
 
     def is_available(self) -> bool:
-        """API anahtarı ve istemci geçerli mi (ve bu oturumda henüz başarısız olmadı mı)?"""
-        return bool(self._client and self.api_key) and not self._gemini_down
+        """API anahtarı ve istemci geçerli mi (ve şu an süreç genelinde 'düşmüş' değil mi)?"""
+        return bool(self._client and self.api_key) and time.time() >= _provider_state["gemini_down_until"]
 
     def _cascade(self, gemini_fn, local_fn, fallback_fn, label: str):
         """
@@ -59,28 +67,41 @@ class GeminiAIProvider(BaseAIProvider):
         (indirilmişse) -> her zaman çalışan statik kural motoru. Her katman kendinden
         önceki başarısız olursa devreye girer, hiçbiri kullanıcıyı bekletmeden çöktürmez.
         Teknik hata detayları sadece log dosyasına yazılır (konsolda gürültü yapmaz).
+        Başarısızlık durumu süreç genelinde (tüm GeminiAIProvider nesneleri arasında)
+        paylaşılır ve süreli bir soğuma sonrası otomatik olarak tekrar denenir.
         """
         if self.is_available():
             try:
                 return gemini_fn()
             except Exception as e:
                 logger.debug(f"Gemini {label} başarısız oldu ({e}). Yerel model deneniyor.")
-                if not self._gemini_down:
+                if time.time() >= _provider_state["gemini_down_until"]:
                     print_info("Gemini API şu an yanıt vermiyor, yerel motora geçildi.")
-                self._gemini_down = True
+                _provider_state["gemini_down_until"] = time.time() + _DOWN_COOLDOWN_SECONDS
 
-        if local_llm_engine.is_available() and not self._local_llm_down:
+        if local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]:
             try:
                 return local_fn()
             except Exception as e:
                 logger.debug(f"Yerel dil modeli {label} başarısız oldu ({e}). Statik motor devrede.")
-                self._local_llm_down = True
+                _provider_state["local_llm_down_until"] = time.time() + _DOWN_COOLDOWN_SECONDS
 
         return fallback_fn()
 
     def _has_real_ai(self) -> bool:
         """Gemini API veya yerel dil modelinden en az biri gerçekten kullanılabilir mi?"""
-        return self.is_available() or local_llm_engine.is_available()
+        return self.has_real_ai()
+
+    def has_real_ai(self) -> bool:
+        """
+        Gemini API veya yerel dil modelinden en az biri gerçekten kullanılabilir mi?
+        (Public: main.py gibi dış çağıranların settings.gemini_api_key'in salt VAR OLMASI
+        yerine gerçek kullanılabilirliği sorgulaması için — istemci kurulumu başarısız
+        olduysa veya süreç bu oturumda 'düşmüş' işaretlendiyse burada da yansır.)
+        """
+        return self.is_available() or (
+            local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]
+        )
 
     def extract_target_profile(self, raw_text: str) -> TargetProfile:
         """
@@ -160,7 +181,13 @@ class GeminiAIProvider(BaseAIProvider):
         """
         Bir ilgi alanı/kişilik özelliği kelimesini, onunla anlamsal olarak ilişkili
         somut/özel kelimelere genişletir (örn: 'kahve' -> 'latte', 'americano').
+        Gerçek bir AI (Gemini/yerel model) yoksa boş liste döner — statik sözlük tek
+        başına alakasız/Türkçe'ye uygun olmayan kelimeler üretebildiği için, bu kural
+        çağıran her yerden bağımsız olarak burada da (extract_target_profile'daki
+        _has_real_ai() kontrolüne ek olarak) zorlanır.
         """
+        if not self._has_real_ai():
+            return []
         return self._cascade(
             gemini_fn=lambda: self._expand_associations_via_gemini(term),
             local_fn=lambda: self._expand_associations_via_local_llm(term),
@@ -366,7 +393,11 @@ class GeminiAIProvider(BaseAIProvider):
     def infer_unknown_values(self, category: str, profile: TargetProfile) -> list[str]:
         """
         Bilinmeyen bir kategori (ör. isimi bilinmeyen evcil hayvan) için en olası değerleri tahmin eder.
+        Gerçek bir AI (Gemini/yerel model) yoksa boş liste döner — bkz. expand_associations
+        docstring'indeki aynı gerekçe.
         """
+        if not self._has_real_ai():
+            return []
         return self._cascade(
             gemini_fn=lambda: self._infer_via_gemini(category, profile),
             local_fn=lambda: self._infer_via_local_llm(category, profile),
