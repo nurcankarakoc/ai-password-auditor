@@ -459,8 +459,24 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
 
     association_words: List[str] = []
     if free_text:
-        print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         provider = GeminiAIProvider()
+        # Gemini özellikle kontrol edilir (yerel model teknik olarak "AI var" saydırsa da,
+        # kalitesi Gemini'nin belirgin şekilde gerisinde kalabiliyor — bkz. bu oturumdaki
+        # gözlemler). Gemini kullanılamıyorsa (hiç anahtar yok, kota doldu, geçici kesinti),
+        # kullanıcıya daha iyi sonuç için hemen bir anahtar ekleme fırsatı sunulur.
+        if not provider.is_available():
+            reason = "hiç API anahtarı eklenmemiş" if not provider._keys else "mevcut anahtar(lar) şu an kullanılamıyor (kota dolmuş veya geçici kesinti olabilir)"
+            print_warning(f"Gemini şu an aktif değil ({reason}) — yerel/basit motorla daha zayıf sonuç alabilirsiniz.")
+            want_key = input(f"{Fore.GREEN}Şimdi (yeni/ek) bir Gemini API anahtarı eklemek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
+            if want_key in ('e', 'evet', 'y', 'yes'):
+                execute_fast_command("apikey", pause=False)
+                provider = GeminiAIProvider()  # yeni anahtarla yeniden oluştur
+                if provider.is_available():
+                    print_success("Anahtar eklendi, metin Gemini ile analiz edilecek.")
+                else:
+                    print_info("Anahtar eklenemedi/hâlâ kullanılamıyor, alternatif motorla devam ediliyor.")
+
+        print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         parsed_extra = provider.extract_target_profile(free_text)
         # Mevcut verilerle birleştir
         names = sorted(list(set(names + parsed_extra.names)))
