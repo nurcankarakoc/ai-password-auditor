@@ -1,6 +1,6 @@
 """
 Cybzenor - Soyut AI Sağlayıcı Arayüzü
-Farklı yapay zeka modelleri (Gemini, Local LLM, Mock vb.) için ortak kontrat.
+Farklı yapay zeka modelleri (Yerel LLM, Mock vb.) için ortak kontrat.
 """
 
 from abc import ABC, abstractmethod
@@ -35,8 +35,8 @@ class BaseAIProvider(ABC):
     @abstractmethod
     def is_available(self) -> bool:
         """
-        Sağlayıcının kullanıma hazır (API anahtarı geçerli, kütüphane yüklü vb.)
-        olup olmadığını bildirir.
+        Sağlayıcının kullanıma hazır (örn. yerel model dosyası indirilmiş ve
+        kütüphane kurulu) olup olmadığını bildirir.
         """
         pass
 

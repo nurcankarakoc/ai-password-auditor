@@ -25,7 +25,21 @@
 
 ---
 
-## 🚀 Kurulum (3 Adımda Hızlı Başlangıç)
+## 💾 En Hızlı Yol: Hazır .exe İndir (Python Kurmadan)
+
+Hiçbir şey kurmak istemiyorsanız, hazır Windows uygulamasını doğrudan indirip çift tıklayarak çalıştırabilirsiniz:
+
+**➡️ [Releases sayfasından `Cybzenor.exe` indir](https://github.com/nurcankarakoc/ai-password-auditor/releases/latest)**
+
+Python gerekmez, kurulum gerekmez — indirin, çift tıklayın, açılsın. Üretilen listeleriniz/hedefleriniz
+`.exe` dosyasının bulunduğu klasörde kalıcı olarak saklanır. Yerel yapay zeka desteği .exe içine
+gömülüdür; Ayarlar sayfasından tek tıkla (~1GB, tek seferlik) indirilebilir.
+
+*(Kendi .exe'nizi kaynak koddan derlemek isterseniz aşağıdaki [Masaüstü Arayüz](#️-masaüstü-arayüz-gui) bölümüne bakın.)*
+
+---
+
+## 🚀 Kurulum (3 Adımda Hızlı Başlangıç — Kaynak Koddan Çalıştırma / Geliştirme)
 
 ### 🐧 Kali Linux / Ubuntu / Debian Üzerinde
 
@@ -57,18 +71,45 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-*(İsteğe Bağlı: Google Gemini, OpenAI (ChatGPT) veya Anthropic (Claude) API anahtarınız varsa sisteme tanıtabilirsiniz; **yoksa da sorun değil**, araç dahili çevrimdışı NLP motoruyla %100 çalışır):*
+*(İsteğe Bağlı: hiçbir bulut API anahtarı gerekmez — araç dahili çevrimdışı NLP motoruyla %100 çalışır. Daha akıllı sonuçlar için tamamen offline çalışan kendi küçük yerel yapay zeka modelinizi kurabilirsiniz):*
 ```bash
-export GEMINI_API_KEY="AIzaSy..."
-# veya çalıştırdıktan sonra herhangi bir yerde 'apikey' yazıp anahtarınızı yapıştırın —
-# Gemini/OpenAI/Anthropic formatı otomatik tanınır.
+python setup_local_ai.py
 ```
 
 ---
 
-## 🎮 Adım Adım Kullanım Senaryoları
+## 🖥️ Masaüstü Arayüz (GUI)
 
-Programı başlatmak için terminale şunu yazmanız yeterlidir:
+Cybzenor'u terminal yerine, sekmeli/koyu temalı bir masaüstü uygulaması olarak da çalıştırabilirsiniz.
+Hedef yönetimi, AI hedefli/hibrit liste üretimi, hash denetimi, canlı login denetimi ve ayarların
+tümü aynı pencereden, arka planda donmadan (uzun işlemler ayrı iş parçacığında çalışır) yönetilir.
+
+```bash
+python launch_gui.py
+```
+
+**Windows'ta** proje klasöründeki `cybzenor-gui.cmd` dosyasına çift tıklayarak da açabilirsiniz.
+
+### 📦 Kendi .exe'nizi Derlemek
+
+Hazır [Releases](https://github.com/nurcankarakoc/ai-password-auditor/releases/latest) sürümü yerine
+kodu kendiniz derlemek isterseniz (örn. bir değişiklik yaptıktan sonra):
+
+```powershell
+pip install -r requirements.txt -r requirements-build.txt
+python build_exe.py
+```
+
+Çıktı `dist/Cybzenor.exe` olarak oluşur — tek dosyadır, başka hiçbir şeye ihtiyaç duymaz.
+`main` dalına `v` ile başlayan bir etiket (örn. `git tag v1.1.0 && git push origin v1.1.0`) push
+ederseniz, GitHub Actions bunu sizin için otomatik derleyip bir Release'e ekler
+(bkz. `.github/workflows/build-exe.yml`) — elle bir .exe yüklemenize gerek kalmaz.
+
+---
+
+## 🎮 Adım Adım Kullanım Senaryoları (Terminal / CLI)
+
+Aynı işlevlere terminalden erişmek isterseniz:
 
 ```bash
 python3 main.py
@@ -90,8 +131,7 @@ Ekrana Cybzenor ana operasyon menüsü gelecektir:
   [3] Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)
   [4] Yerel Hash Denetim Motoru (Local Hash Audit Engine)
   [5] Canlı Login Ekranı Denetimi (Online Login Audit) [Sadece Yetkili Hedefler]
-  [6] Kıyaslama ve Performans Analizi (Benchmark Module)
-  [7] Çıkış (Exit)
+  [6] Çıkış (Exit)
 ```
 
 ---
@@ -177,15 +217,12 @@ Yeni başlayanların en sık sorduğu soru: *"Neden direkt şifreyi yazıp aram�
 > **Cevap:** Terminalde yanlış dizindesiniz demektir (muhtemelen `~` ana klasöründesiniz).  
 > Çözüm: `cd ~/ai-password-auditor` yazarak proje klasörünün içine girip öyle `git pull` yapın.
 
-### S: API Anahtarı (API Key) almak zorunda mıyım? Sadece Gemini mi destekleniyor?
-> **Cevap:** Hayır, zorunlu değil, ama **şiddetle önerilir** — ücretsiz ve 1 dakika sürer. Cybzenor artık **3 farklı bulut AI sağlayıcısını** (Gemini, OpenAI/ChatGPT, Anthropic/Claude) destekler ve genel olarak 3 katmanlı bir zincir kullanır:
-> 1. **Bulut AI** (Gemini → OpenAI → Anthropic önceliğiyle, hangisinin anahtarı çalışıyorsa) — en akıllı/en doğru sonuç. **Önerilen yol budur.** Gemini önceliklidir çünkü kalıcı bir ücretsiz katmanı vardır; OpenAI/Anthropic sadece Gemini kullanılamadığında (kota/kesinti) devreye girer.
-> 2. **Yerel Küçük Dil Modeli** (isteğe bağlı, `python setup_local_ai.py` ile ~1GB indirilir) — hiç API anahtarı olmadan tamamen offline çalışır, ancak küçük model boyutu nedeniyle çıktı kalitesi bulut AI'nin gerisindedir; deneysel bir seçenek olarak düşünün.
-> 3. **Statik Kural/Regex Motoru** — hiçbiri kurulu değilse devreye girer, yine de hedefin takımları/isimleri/ilişkilerini makul doğrulukla ayrıştırır.
+### S: API Anahtarı (API Key) almak zorunda mıyım? Hangi yapay zekayı kullanıyor?
+> **Cevap:** Hayır, hiçbir bulut API anahtarına (Gemini/OpenAI/Anthropic vb.) hiçbir zaman ihtiyaç yoktur — Cybzenor kendi dahili yapay zekasını kullanır ve 2 katmanlı bir zincirle çalışır:
+> 1. **Yerel Küçük Dil Modeli** (isteğe bağlı ama önerilir, `python setup_local_ai.py` ile ~1GB indirilir) — hiçbir API anahtarı olmadan, internete hiç çıkmadan, tamamen bilgisayarınızda çalışır.
+> 2. **Statik Kural/Regex Motoru** — yerel model kurulu değilse devreye girer, yine de hedefin takımları/isimleri/ilişkilerini makul doğrulukla ayrıştırır.
 >
-> **Kendi API anahtarınızı eklemek için:** Cybzenor'da herhangi bir yerde `apikey` yazıp Gemini ([aistudio.google.com/apikey](https://aistudio.google.com/apikey) — ücretsiz), OpenAI veya Anthropic anahtarlarından **herhangi birini** yapıştırın; hangi servise ait olduğu formatından **otomatik tanınır** (Gemini `AIzaSy...`/`AQ....`, OpenAI `sk-...`, Anthropic `sk-ant-...`). Tanınamazsa kısa bir menüden elle seçebilirsiniz. Anahtar `.env` dosyasına kaydedilir (asla GitHub'a gitmez, `.gitignore`'da tanımlıdır) ve bir daha girmenize gerek kalmaz.
->
-> **Ücretsiz kota dolarsa ne olur?** Google'ın ücretsiz katmanı günde/dakikada sınırlı istek hakkı verir (`RESOURCE_EXHAUSTED` hatası). Cybzenor önce geçici hatalarda (sunucu yoğunluğu) birkaç kez otomatik tekrar dener; kota tamamen dolduysa `apikey` komutunu **tekrar** çalıştırıp ikinci bir Gemini anahtarı (farklı bir Google hesabından) YA DA farklı bir sağlayıcıdan (OpenAI/Anthropic) anahtar ekleyebilirsiniz — mevcut anahtarların YERİNE değil YANINA kaydedilir, ve bir anahtarın/sağlayıcının kotası dolduğunda sistem otomatik olarak sıradakine geçer. Hiç yedek yoksa (veya hepsi dolduysa) otomatik olarak yerel motora düşer.
+> Aracı kurduktan sonra `python setup_local_ai.py` çalıştırmanız yeterlidir; bir daha hiçbir ayar yapmanız gerekmez.
 
 ### S: Ürettiğim wordlist'ler ve hedef bilgileri GitHub'a yüklenir mi?
 > **Cevap:** Hayır. `.gitignore` dosyamızda `wordlists/generated/` ve `logs/` tanımlıdır. Ürettiğiniz hiçbir özel liste veya hedef verisi asla GitHub'a gitmez; yalnızca sizin bilgisayarınızda yerel olarak kalır.

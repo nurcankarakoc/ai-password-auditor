@@ -8,7 +8,7 @@ import re
 import json
 import hashlib
 from pathlib import Path
-from typing import NoReturn, Optional, List, Dict, Any, Tuple
+from typing import NoReturn, Optional, List, Tuple
 from colorama import Fore, Style
 
 from config.settings import settings, BASE_DIR
@@ -41,22 +41,18 @@ def display_system_status() -> None:
     print(f" • Maksimum Aday Limiti   : {settings.wordlist.max_candidates:,}")
     print(f" • Log Seviyesi / Maskele : {settings.log_level} / {'Aktif' if settings.mask_sensitive_data else 'Pasif'}")
     print(f" • Güvenlik Hata Eşiği    : {settings.safety.max_consecutive_failures} ardışık deneme")
-    # Anahtarın salt VAR OLMASI yerine gerçek provider durumuna bakılır — anahtar
-    # hatalıysa (istemci kurulamadıysa) ya da sağlayıcı bu oturumda geçici olarak
-    # "düşmüş" işaretliyse, ekran yanlışlıkla "Aktif" göstermesin. Gemini/OpenAI/
-    # Anthropic'ten hangisi aktifse (veya anahtarı varsa) o gösterilir.
-    from ai.ai_manager import get_active_ai_provider, any_cloud_ai_configured, is_missing_dependency_error
+    # Yerel AI motorunun (küçük dil modeli) o an gerçekten yüklü/kullanılabilir olup
+    # olmadığına bakılır; değilse otomatik olarak deterministik kural motoruna düşülür
+    # (bkz. ai/local_provider.py), bu yüzden sistem her durumda çalışmaya devam eder.
+    from ai.ai_manager import get_active_ai_provider
     _ai_check = get_active_ai_provider()
     if _ai_check.is_available():
-        ai_status = f"{Fore.GREEN}{_ai_check.PROVIDER_LABEL} API Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
-    elif _ai_check._keys and is_missing_dependency_error(_ai_check):
-        ai_status = f"{Fore.RED}{_ai_check.PROVIDER_LABEL} paketi kurulu değil — 'pip install -r requirements.txt' çalıştırın{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
-    elif _ai_check._keys and _ai_check.client_init_error:
-        ai_status = f"{Fore.RED}{_ai_check.PROVIDER_LABEL} anahtarı geçersiz/başlatılamadı — 'apikey' ile güncelleyin{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
-    elif any_cloud_ai_configured():
-        ai_status = f"{Fore.YELLOW}{_ai_check.PROVIDER_LABEL} şu an yanıt vermiyor, offline motor devrede{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+        ai_status = f"{Fore.GREEN}Yerel Yapay Zeka Motoru Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     else:
-        ai_status = f"{Fore.YELLOW}Offline Motor (API key yok — 'apikey' yazarak ekleyebilirsiniz){Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+        ai_status = (
+            f"{Fore.YELLOW}Offline Kural Motoru (yerel AI modeli kurulu değil — "
+            f"'python setup_local_ai.py' ile kurabilirsiniz){Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+        )
     print(f" • AI Motoru              : {ai_status}")
     print(f"---------------------------------{Style.RESET_ALL}\n")
 
@@ -69,9 +65,8 @@ def display_menu() -> None:
     print(f" {Fore.CYAN}[3]{Style.RESET_ALL} Hibrit Wordlist Birleştirici (Hybrid Wordlist Generation)")
     print(f" {Fore.CYAN}[4]{Style.RESET_ALL} Yerel Hash Denetim Motoru (Local Hash Audit Engine)")
     print(f" {Fore.CYAN}[5]{Style.RESET_ALL} Canlı Login Ekranı Denetimi (Online Login Audit) {Fore.RED}[Sadece Yetkili Hedefler]{Style.RESET_ALL}")
-    print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Kıyaslama ve Performans Analizi (Benchmark Module)")
-    print(f" {Fore.CYAN}[7]{Style.RESET_ALL} Çıkış (Exit)\n")
-    print(f"{Fore.LIGHTBLACK_EX} ⚡ Siber Komutlar: 'targets', 'use <hedef>', 'view 10', 'info', 'search <kelime>', 'apikey', 'help'{Style.RESET_ALL}\n")
+    print(f" {Fore.CYAN}[6]{Style.RESET_ALL} Çıkış (Exit)\n")
+    print(f"{Fore.LIGHTBLACK_EX} ⚡ Siber Komutlar: 'targets', 'use <hedef>', 'view 10', 'info', 'search <kelime>', 'help'{Style.RESET_ALL}\n")
 
 
 def handle_default_wordlist_operations() -> None:
@@ -403,7 +398,6 @@ def handle_default_wordlist_operations() -> None:
 
 
 from ai.ai_manager import get_active_ai_provider
-from ai.base import BaseAIProvider
 from utils.turkish_data import TR_CITY_PLAKA, TR_PLAKA_CITY, TR_CLUB_FOUNDING_YEARS
 from core.ranking_engine import RankingEngine
 from ai.schemas import TargetProfile, PasswordPolicy
@@ -458,12 +452,14 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     # 5. Özel Kelimeler / Renk / Lakap
     print(f"\n{Fore.CYAN}5. Özel Kelimeler, Sevdiği Renk veya Lakap:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: mor, mavi, yazılımcı, kartal{Style.RESET_ALL}")
-    # Anahtarın VAR OLMASI yerine provider'ın gerçek has_real_ai() kontrolüne bakılır —
-    # anahtar geçersizse veya tüm bulut sağlayıcılar şu an düşmüşse (soğuma süresinde)
-    # de bu uyarı doğru şekilde gösterilsin.
+    # Yerel AI modeli kurulu/yüklü değilse (has_real_ai() False) kullanıcıyı bilgilendir —
+    # bu durumda sistem yalnızca KESİN eşleşen sabit kategorilerde (örn. 'köpeği var' -> yaygın
+    # köpek isimleri) tahmin yapabilir; serbest metindeki isimsiz bir sanatçı/anime/eser gibi
+    # açık uçlu çağrışımlar için gerçek AI gerekir.
     if not get_active_ai_provider().has_real_ai():
-        print(f"{Fore.YELLOW}   Not: AI aktif değil (bkz. 'apikey' komutu) — sistem kelime TAHMİN ETMEYECEK,")
-        print(f"   sadece burada bizzat yazdığınız kelimeleri kullanacak. Aklınıza gelen her şeyi girin.{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}   Not: Yerel AI modeli kurulu değil (bkz. 'python setup_local_ai.py') — sistem sadece temel/")
+        print(f"   sabit kategorilerde tahmin yapabilir, açık uçlu çağrışımlar (örn. bir sanatçının şarkıları) için")
+        print(f"   gerçek AI gerekir. Aklınıza gelen her şeyi girin.{Style.RESET_ALL}")
     kw_input = input(f"{Fore.GREEN}   > Özel Kelimeler: {Style.RESET_ALL}").strip()
     keywords = [k.strip().capitalize() for k in re.split(r'[,/&+\s]+', kw_input) if len(k.strip()) >= 2] if kw_input else []
 
@@ -481,15 +477,6 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
         provider = get_active_ai_provider()
         print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         parsed_extra = provider.extract_target_profile(free_text)
-
-        # Kota/kesinti tam BU çağrı sırasında ortaya çıkmış olabilir (bir öncekinde
-        # sağlayıcı hâlâ aktifti). O yüzden teklif çağrıdan SONRA yapılır, ki mesajı
-        # gören kullanıcı orada hemen anahtar ekleyebilsin.
-        was_down = not provider.is_available()
-        provider = _offer_api_key_if_ai_down(context="bu metni daha isabetli analiz etmek için")
-        if was_down and provider.is_available():
-            print_info("Yeni anahtarla metin tekrar (ve daha isabetli şekilde) analiz ediliyor...")
-            parsed_extra = provider.extract_target_profile(free_text)
 
         # Mevcut verilerle birleştir
         names = sorted(list(set(names + parsed_extra.names)))
@@ -590,7 +577,7 @@ def save_target_profile_to_disk(profile: TargetProfile) -> Optional[Path]:
     slug = re.sub(r'[^a-zA-Z0-9_]', '_', t_name.lower()).strip('_') or "target"
     slug_file = synthetic_dir / f"target_{slug}.json"
 
-    print(f"{Fore.LIGHTBLACK_EX}İpucu: Benchmark veya hash testlerinde kullanılacak doğru test parolasını (Ground Truth) belirtebilirsiniz.{Style.RESET_ALL}")
+    print(f"{Fore.LIGHTBLACK_EX}İpucu: Hash testlerinde kullanılacak doğru test parolasını (Ground Truth) belirtebilirsiniz.{Style.RESET_ALL}")
     pwd_hint = input(f"{Fore.CYAN}Test parolası (Ground Truth) [Boş bırakılabilir]: {Style.RESET_ALL}").strip()
     target_hash = ""
     if pwd_hint:
@@ -611,7 +598,7 @@ def save_target_profile_to_disk(profile: TargetProfile) -> Optional[Path]:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     print_success(f"Hedef profil başarıyla kaydedildi: data/synthetic_profiles/{slug_file.name}")
-    print_info("Bu hedef artık [4] Hash Denetim Motoru ve [6] Kıyaslama Modülü hedefleri arasında seçilebilir!")
+    print_info("Bu hedef artık [4] Hash Denetim Motoru hedefleri arasında seçilebilir!")
     return slug_file
 
 
@@ -695,11 +682,6 @@ def handle_targeted_wordlist_generation() -> None:
                 f"({settings.wordlist.min_candidates:,}) altında kaldı — profil bilgisi az. "
                 f"Daha kapsamlı sonuç için isim/tarih/ilgi alanı gibi ek bilgiler girmeyi deneyin."
             )
-
-        # Üretim sırasında aktif AI sağlayıcının kotası dolmuş/kullanılamaz olabilir
-        # (yukarıdaki loglarda görülür). Kullanıcı hemen burada, bir sonraki üretim
-        # için yeni bir anahtar ekleyebilsin diye tekrar sormadan önce fırsat sunulur.
-        _offer_api_key_if_ai_down(context="sonraki üretimlerde daha iyi sonuç almak için")
 
         save_target_profile_to_disk(profile)
 
@@ -930,7 +912,6 @@ from core.safety_controller import (
     run_safety_monitored_audit,
     SafetyTriggerReason
 )
-from core.benchmark import BenchmarkSuite
 from core.online_login_auditor import HttpLoginAuditService
 
 
@@ -1262,160 +1243,6 @@ def handle_online_login_audit() -> None:
     pause_prompt()
 
 
-def handle_benchmark_module() -> None:
-    """[6] Kıyaslama ve Performans Analizi (Benchmark Module)."""
-    clear_screen()
-    print_banner(version=settings.version)
-    print_header("KIYASLAMA VE BAŞARI ANALİZİ (Benchmark Module)")
-    print(f"{Fore.LIGHTBLACK_EX}Üç farklı wordlist (Default, AI Targeted, Hybrid) aynı hedef üzerinde yarıştırılır.{Style.RESET_ALL}\n")
-
-    # Sentetik hedefleri listele
-    synthetic_dir = BASE_DIR / "data" / "synthetic_profiles"
-    synthetic_files = list(synthetic_dir.glob("*.json")) if synthetic_dir.exists() else []
-
-    target_hash = None
-    target_label = None
-    sdata: Dict[str, Any] = {}
-
-    if synthetic_files:
-        print(f"{Fore.YELLOW}Kayıtlı Sentetik Hedefler:{Style.RESET_ALL}")
-        for idx, sfile in enumerate(synthetic_files, 1):
-            try:
-                with open(sfile, "r", encoding="utf-8") as f:
-                    sdata = json.load(f)
-                pname = sdata.get("target_name") or sdata.get("target_id", sfile.stem)
-                gt = sdata.get("ground_truth", {}) if isinstance(sdata.get("ground_truth"), dict) else {}
-                pw = gt.get("plain_password_hint") or sdata.get("ground_truth_password", "Bilinmiyor")
-                print(f" {Fore.CYAN}[{idx}]{Style.RESET_ALL} {pname} (Ground Truth: {pw})")
-            except Exception:
-                print(f" {Fore.CYAN}[{idx}]{Style.RESET_ALL} {sfile.name}")
-        print(f" {Fore.CYAN}[{len(synthetic_files) + 1}]{Style.RESET_ALL} Manuel SHA-256 Hash veya Açık Parola Gir")
-        print(f" {Fore.CYAN}[{len(synthetic_files) + 2}]{Style.RESET_ALL} İptal / Ana Menü")
-
-        choice = input(f"\n{Fore.GREEN}Hedef seçiniz [1-{len(synthetic_files) + 2}]: {Style.RESET_ALL}").strip()
-        if choice == str(len(synthetic_files) + 2) or not choice:
-            return
-
-        if choice.isdigit() and 1 <= int(choice) <= len(synthetic_files):
-            chosen_file = synthetic_files[int(choice) - 1]
-            with open(chosen_file, "r", encoding="utf-8") as f:
-                sdata = json.load(f)
-            gt = sdata.get("ground_truth", {}) if isinstance(sdata.get("ground_truth"), dict) else {}
-            target_hash = gt.get("target_hash") or sdata.get("sha256_hash")
-            target_label = sdata.get("target_name") or sdata.get("target_id", chosen_file.stem)
-        elif choice == str(len(synthetic_files) + 1):
-            user_in = input(f"{Fore.GREEN}Hedef SHA-256 Hash veya Parola: {Style.RESET_ALL}").strip()
-            if not user_in:
-                return
-            if len(user_in) == 64 and all(c in "0123456789abcdefABCDEF" for c in user_in):
-                target_hash = user_in.lower()
-            else:
-                target_hash = LocalHashAuditEngine.compute_hash_sha256(user_in)
-            target_label = "Manuel Hedef"
-            sdata = {}
-    else:
-        user_in = input(f"{Fore.GREEN}Hedef SHA-256 Hash veya Açık Parola girin: {Style.RESET_ALL}").strip()
-        if not user_in:
-            return
-        if len(user_in) == 64 and all(c in "0123456789abcdefABCDEF" for c in user_in):
-            target_hash = user_in.lower()
-        else:
-            target_hash = LocalHashAuditEngine.compute_hash_sha256(user_in)
-        target_label = "Manuel Hedef"
-        sdata = {}
-
-    # Wordlist yollarını belirle
-    default_path = wordlist_manager.default_wordlist_path
-    generated_dir = BASE_DIR / "wordlists" / "generated"
-
-    # wordlists/generated altındaki tüm txt dosyalarını topla
-    all_gen_files = sorted([f for f in generated_dir.glob("*.txt") if f.is_file()], key=lambda p: p.stat().st_mtime, reverse=True)
-
-    targeted_path = None
-    hybrid_path = None
-
-    if all_gen_files:
-        print(f"\n{Fore.YELLOW}Kıyaslamada Yarıştırılacak Hedefli Wordlist:{Style.RESET_ALL}")
-        for idx, gf in enumerate(all_gen_files, 1):
-            print(f" {Fore.CYAN}[{idx}]{Style.RESET_ALL} {gf.name} ({round(gf.stat().st_size / 1024, 1)} KB)")
-        print(f" {Fore.CYAN}[A]{Style.RESET_ALL} Otomatik Eşleştir (En son üretilen liste)")
-
-        wl_choice = input(f"{Fore.GREEN}Seçiminiz [1-{len(all_gen_files)} veya A]: {Style.RESET_ALL}").strip().upper()
-        if wl_choice.isdigit() and 1 <= int(wl_choice) <= len(all_gen_files):
-            targeted_path = all_gen_files[int(wl_choice) - 1]
-
-    if not targeted_path:
-        targeted_files = sorted(generated_dir.glob("ai_targeted_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if targeted_files:
-            targeted_path = targeted_files[0]
-        elif all_gen_files:
-            targeted_path = all_gen_files[0]
-        elif "profile" in sdata:
-            print_info(f"'{target_label}' için AI Hedefli Wordlist otomatik üretiliyor...")
-            from ai.schemas import TargetProfile
-            from core.ranking_engine import RankingEngine
-            prof_obj = TargetProfile(**sdata["profile"])
-            r_engine = RankingEngine(prof_obj)
-            auto_target_path, _ = r_engine.build_targeted_wordlist()
-            targeted_path = auto_target_path
-
-    # Hibrit liste tespiti
-    hybrid_files = sorted(generated_dir.glob("hybrid_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if hybrid_files:
-        hybrid_path = hybrid_files[0]
-    elif targeted_path and "profile" in sdata:
-        print_info("Hibrit Wordlist otomatik birleştiriliyor...")
-        from ai.schemas import TargetProfile
-        from core.ranking_engine import RankingEngine
-        h_engine = RankingEngine(TargetProfile(**sdata["profile"]))
-        auto_hybrid_path, _ = h_engine.build_hybrid_wordlist()
-        hybrid_path = auto_hybrid_path
-
-    targeted_path = targeted_path or default_path
-    hybrid_path = hybrid_path or default_path
-
-    print(f"\n{Fore.LIGHTBLACK_EX}--- Kıyaslanacak Wordlist'ler ---")
-    print(f" 1. Varsayılan: {default_path.name}")
-    print(f" 2. AI Hedefli : {targeted_path.name}")
-    print(f" 3. Hibrit     : {hybrid_path.name}")
-    print(f"--------------------------------{Style.RESET_ALL}\n")
-
-    print_info("Benchmark yarışı başlatılıyor...")
-    suite = BenchmarkSuite()
-    report = suite.run_comparative_benchmark(
-        target_hash=target_hash,
-        default_path=default_path,
-        targeted_path=targeted_path,
-        hybrid_path=hybrid_path,
-        target_profile_name=target_label
-    )
-
-    results = report["report_data"]["benchmark_results"]
-    winner = report["report_data"]["winner_mode"]
-
-    print_header("BENCHMARK KIYASLAMA TABLOSU")
-    print(f"{Fore.CYAN}{'Mod':<22} | {'Durum':<10} | {'Sıra':<8} | {'Test Edilen':<12} | {'Süre (sn)':<10} | {'Verimlilik':<10}{Style.RESET_ALL}")
-    print("-" * 84)
-
-    for r in results:
-        status_color = Fore.GREEN if r["matched"] else Fore.RED
-        pos_str = f"{r['position']:,}" if r["position"] else "-"
-        eff_str = f"%{r['efficiency_score']}" if r["matched"] else "%0"
-        print(
-            f"{r['mode']:<22} | "
-            f"{status_color}{r['status']:<10}{Style.RESET_ALL} | "
-            f"{pos_str:<8} | "
-            f"{r['tested_candidates']:<12,}"
-            f" | {r['duration_seconds']:<10.4f} | "
-            f"{Fore.YELLOW}{eff_str:<10}{Style.RESET_ALL}"
-        )
-
-    print("-" * 84)
-    print_success(f"KAZANAN LİSTE: {Fore.YELLOW}{Style.BRIGHT}{winner}{Style.RESET_ALL}")
-    print_info(f"Rapor Kaydedildi: {report['report_path']}")
-    pause_prompt()
-
-
 def exit_application() -> NoReturn:
     """Uygulamayı güvenli ve temiz bir şekilde sonlandırır."""
     print("\n")
@@ -1424,75 +1251,27 @@ def exit_application() -> NoReturn:
     sys.exit(0)
 
 
-def _offer_api_key_if_ai_down(context: str) -> "BaseAIProvider":
+def _offer_local_ai_setup_if_missing() -> None:
     """
-    Hiçbir bulut AI sağlayıcısı (Gemini/OpenAI/Anthropic) kullanılamıyorsa (hiç anahtar
-    yok, kota dolmuş, geçici kesinti) kullanıcıya hemen orada (yeni/ek) bir anahtar
-    ekleme fırsatı sunar ve güncel bir provider döner. Zaten çalışan bir sağlayıcı
-    varsa hiçbir şey sormadan sadece onu döner.
-
-    context: kullanıcıya gösterilecek kısa açıklama, örn. "bu metni analiz etmek için".
+    Yerel AI modeli (küçük dil modeli) kurulu değilse, kullanıcıya program başlarken
+    bir kerelik 'setup_local_ai.py' betiğini hatırlatır. Bu, sadece offline kural
+    motorunu bilmesini beklemek yerine daha iyi bir ilk deneyim (onboarding) sağlar.
+    Hiçbir şeyi bloklamaz — aracın geri kalanı deterministik kural motoruyla normal
+    şekilde çalışmaya devam eder.
     """
-    provider = get_active_ai_provider()
-    if provider.is_available():
-        return provider
-
-    # Anahtar zaten kayıtlı ama ilgili SDK paketi bu makinede kurulu değilse (örn.
-    # kodu 'git pull' ile başka bir makineye taşıyıp 'pip install -r requirements.txt'
-    # çalıştırmayı unutmak), yeni bir anahtar eklemek hiçbir şeyi çözmez — asıl sorun
-    # kota/kesinti değil, eksik pakettir. Bu durumda anahtar eklemeyi TEKLİF ETMEDEN
-    # doğru komutu göster.
-    from ai.ai_manager import is_missing_dependency_error
-    if provider._keys and is_missing_dependency_error(provider):
-        print_warning(
-            f"{provider.PROVIDER_LABEL} istemcisi başlatılamadı: gerekli Python paketi bu makinede kurulu "
-            f"değil ({provider.client_init_error}). Yeni bir anahtar eklemek bunu çözmez — terminalde "
-            f"'pip install -r requirements.txt' çalıştırıp tekrar deneyin. Şimdilik yerel/basit motorla devam ediliyor."
-        )
-        return provider
-
-    reason = (
-        "hiç API anahtarı eklenmemiş" if not provider._keys
-        else "mevcut anahtar(lar) şu an kullanılamıyor (kota dolmuş veya geçici kesinti olabilir)"
-    )
-    print_warning(f"{provider.PROVIDER_LABEL} şu an aktif değil ({reason}) — yerel/basit motorla daha zayıf sonuç alabilirsiniz.")
-    want_key = input(f"{Fore.GREEN}Şimdi (yeni/ek) bir AI API anahtarı eklemek ister misiniz (Gemini/OpenAI/Anthropic), {context}? [E/h]: {Style.RESET_ALL}").strip().lower()
-    if want_key in ('e', 'evet', 'y', 'yes'):
-        execute_fast_command("apikey", pause=False)
-        provider = get_active_ai_provider()  # yeni anahtarla yeniden oluştur
-        if provider.is_available():
-            print_success(f"Anahtar eklendi, {provider.PROVIDER_LABEL} kullanılacak.")
-        else:
-            print_info("Anahtar eklenemedi/hâlâ kullanılamıyor, alternatif motorla devam ediliyor.")
-    return provider
-
-
-def _offer_api_key_setup_if_missing() -> None:
-    """
-    Hiçbir AI API anahtarı tanımlı değilse, kullanıcıya program başlarken bir kerelik
-    'şimdi eklemek ister misin?' teklifi sunar. Bu, sadece 'apikey' komutunu bilmesini
-    beklemek yerine daha iyi bir ilk deneyim (onboarding) sağlar. İstemezse hiçbir şeyi
-    bloklamaz, aracın geri kalanı offline motorla normal şekilde çalışmaya devam eder.
-    """
-    from ai.ai_manager import any_cloud_ai_configured
-    if any_cloud_ai_configured():
+    if get_active_ai_provider().is_available():
         return
 
     clear_screen()
     print_banner(version=settings.version)
-    print_header("YAPAY ZEKA KURULUMU (İsteğe Bağlı ama Önerilir)")
+    print_header("YAPAY ZEKA MOTORU (İsteğe Bağlı ama Önerilir)")
     print("Cybzenor, hedef profilleri anlamak ve daha isabetli parola tahminleri üretmek için")
-    print("Google Gemini, OpenAI (ChatGPT) veya Anthropic (Claude) API'lerinden birini kullanabilir.")
-    print("Anahtar olmadan da çalışır (offline kural motoru), ama bir AI anahtarıyla sonuçlar")
-    print("belirgin şekilde daha akıllı olur. Gemini'nin kalıcı ücretsiz katmanı vardır.\n")
-    print(f"{Fore.LIGHTBLACK_EX}Ücretsiz Gemini anahtarı: https://aistudio.google.com/apikey{Style.RESET_ALL}\n")
-
-    choice = input(f"{Fore.GREEN}Şimdi bir AI API anahtarı eklemek ister misiniz? [E/h]: {Style.RESET_ALL}").strip().lower()
-    if choice in ('e', 'evet', 'y', 'yes'):
-        execute_fast_command("apikey", pause=False)
-    else:
-        print_info("Sorun değil, offline motorla devam edilecek. İstediğiniz an 'apikey' yazarak ekleyebilirsiniz.")
-        pause_prompt()
+    print("herhangi bir bulut API anahtarı olmadan çalışan, kendi yerel dil modelini kullanabilir.")
+    print("Modelsiz de çalışır (offline kural motoru), ama yerel AI modeliyle sonuçlar")
+    print("belirgin şekilde daha akıllı olur.\n")
+    print(f"{Fore.LIGHTBLACK_EX}Kurulum: terminalde 'python setup_local_ai.py' çalıştırın (~1GB indirir, tek seferlik).{Style.RESET_ALL}\n")
+    print_info("Şimdilik offline kural motoruyla devam ediliyor.")
+    pause_prompt()
 
 
 def main() -> None:
@@ -1507,7 +1286,7 @@ def main() -> None:
 
     logger.info(f"{settings.app_name} v{settings.version} başlatıldı.")
 
-    _offer_api_key_setup_if_missing()
+    _offer_local_ai_setup_if_missing()
 
     while True:
         try:
@@ -1517,7 +1296,7 @@ def main() -> None:
             display_menu()
 
             active_target = get_active_target()
-            prompt_label = f"cybzenor ({Fore.CYAN}{active_target}{Fore.GREEN}) > " if active_target else "cybzenor [1-7 veya komut]: "
+            prompt_label = f"cybzenor ({Fore.CYAN}{active_target}{Fore.GREEN}) > " if active_target else "cybzenor [1-6 veya komut]: "
             choice = input(f"{Fore.GREEN}{Style.BRIGHT}{prompt_label}{Style.RESET_ALL}").strip()
 
             if not choice:
@@ -1538,11 +1317,9 @@ def main() -> None:
             elif choice == "5":
                 handle_online_login_audit()
             elif choice == "6":
-                handle_benchmark_module()
-            elif choice == "7":
                 exit_application()
             else:
-                print_error("Geçersiz seçim! Lütfen 1 ile 7 arasında bir rakam girin veya bir komut yazın (örn: 'view 10', 'list').")
+                print_error("Geçersiz seçim! Lütfen 1 ile 6 arasında bir rakam girin veya bir komut yazın (örn: 'view 10', 'list').")
                 pause_prompt()
 
         except KeyboardInterrupt:

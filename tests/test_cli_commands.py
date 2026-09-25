@@ -50,6 +50,6 @@ class TestCLICommands:
         assert "CYBZENOR" in captured.out
 
     def test_execute_fast_command_ignores_menu_numbers(self):
-        """1-7 arasındaki menü seçimlerinin fast command tarafından yutulmadığını doğrula."""
-        for num in ["1", "2", "3", "4", "5", "6", "7"]:
+        """1-6 arasındaki menü seçimlerinin fast command tarafından yutulmadığını doğrula."""
+        for num in ["1", "2", "3", "4", "5", "6"]:
             assert execute_fast_command(num, pause=False) is False

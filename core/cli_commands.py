@@ -370,7 +370,7 @@ def cmd_target_info(target: Optional[str] = None) -> None:
 def print_command_help() -> None:
     """Kullanılabilir doğrudan siber komutları listeler."""
     print_header("CYBZENOR / SİBER KOMUT SATIRI KILAVUZU")
-    print("Menü numarası [1-7] girmek yerine aşağıdaki profesyonel komutları yazabilirsiniz:\n")
+    print("Menü numarası [1-6] girmek yerine aşağıdaki profesyonel komutları yazabilirsiniz:\n")
     print(f" {Fore.CYAN}targets / list / ls{Style.RESET_ALL}     : Tüm hedefleri (Dossiers), profil bilgileri ve sayılarıyla listeler.")
     print(f" {Fore.CYAN}use <hedef veya no>{Style.RESET_ALL}     : Bir hedefi AKTİF yapar (Örn: 'use target_01' veya 'use 1').")
     print(f" {Fore.CYAN}view [n]{Style.RESET_ALL}                : Aktif/seçili hedefin ilk n (örn: 10) parolasını görüntüler.")
@@ -379,7 +379,6 @@ def print_command_help() -> None:
     print(f" {Fore.CYAN}info <hedef>{Style.RESET_ALL}            : Hedefin toplanan tüm OSINT profil detaylarını gösterir.")
     print(f" {Fore.CYAN}search <kelime>{Style.RESET_ALL}         : Wordlist içinde arama yapar (Örn: 'search pamuk').")
     print(f" {Fore.CYAN}unuse / back{Style.RESET_ALL}            : Aktif hedef seçimini temizler.")
-    print(f" {Fore.CYAN}apikey{Style.RESET_ALL}                  : Gemini API anahtarınızı ekler/günceller (AI özelliklerini güçlendirir).")
     print(f" {Fore.CYAN}help / ?{Style.RESET_ALL}                : Bu yardım ekranını gösterir.")
     print(f" {Fore.CYAN}exit / q{Style.RESET_ALL}                : Programdan çıkar.\n")
     print(f"{Fore.LIGHTBLACK_EX}Örnek: 'targets' yazıp hedefleri görebilir, 'use target_01' ile aktif edip 'view 10' diyebilirsiniz.{Style.RESET_ALL}")
@@ -389,13 +388,13 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
     """
     Kullanıcının girdiği metni komut olarak değerlendirir.
     Geçerli bir komut ise çalıştırıp True döner.
-    Standart menü seçimi (1-7) veya boşluk ise False döner.
+    Standart menü seçimi (1-6) veya boşluk ise False döner.
     """
     raw = cmd_text.strip()
     if not raw:
         return False
 
-    if raw in ["1", "2", "3", "4", "5", "6", "7"]:
+    if raw in ["1", "2", "3", "4", "5", "6"]:
         return False
 
     tokens = raw.split()
@@ -494,62 +493,6 @@ def execute_fast_command(cmd_text: str, pause: bool = True) -> bool:
         query = args[0]
         target = args[1] if len(args) > 1 else None
         cmd_search_wordlist(query=query, target=target)
-        maybe_pause()
-        return True
-
-    # 9b. AI API anahtarı ekleme/güncelleme (apikey) — Gemini/OpenAI/Anthropic
-    if cmd in ["apikey", "api-key", "anahtar"]:
-        from config.settings import settings, save_ai_api_key, detect_provider_from_key
-
-        def _mask(k: str) -> str:
-            return f"{k[:6]}...{k[-4:]}" if len(k) >= 12 else f"{k[:2]}...{k[-1:]}"
-
-        provider_labels = {"gemini": "Gemini", "openai": "OpenAI", "anthropic": "Anthropic"}
-        provider_key_fields = {
-            "gemini": settings.gemini_api_keys,
-            "openai": settings.openai_api_keys,
-            "anthropic": settings.anthropic_api_keys,
-        }
-
-        print_header("AI API ANAHTARI")
-        any_registered = any(provider_key_fields.values())
-        if any_registered:
-            for provider, keys in provider_key_fields.items():
-                if not keys:
-                    continue
-                print(f"{Fore.LIGHTBLACK_EX}{provider_labels[provider]} — {len(keys)} anahtar:{Style.RESET_ALL}")
-                for i, k in enumerate(keys, 1):
-                    print(f"{Fore.LIGHTBLACK_EX}  [{i}] {_mask(k)}{Style.RESET_ALL}")
-            print(
-                f"{Fore.LIGHTBLACK_EX}Not: Yeni bir anahtar girersen aynı sağlayıcıdaki mevcutların YERİNE değil, "
-                f"YANINA eklenir — biri kota sınırına ulaştığında otomatik olarak sıradakine geçilir. Gemini önceliklidir; "
-                f"OpenAI/Anthropic sadece Gemini kullanılamadığında devreye girer.{Style.RESET_ALL}"
-            )
-        print(f"{Fore.LIGHTBLACK_EX}Ücretsiz Gemini anahtarı: https://aistudio.google.com/apikey{Style.RESET_ALL}")
-        print(f"{Fore.LIGHTBLACK_EX}Gemini, OpenAI veya Anthropic anahtarlarından herhangi birini yapıştırabilirsiniz — "
-              f"hangisine ait olduğu otomatik tanınır.{Style.RESET_ALL}")
-        new_key = input(f"{Fore.GREEN}Yeni AI API anahtarınızı yapıştırın [ENTER = vazgeç]: {Style.RESET_ALL}").strip()
-        if not new_key:
-            print_info("İşlem iptal edildi.")
-            maybe_pause()
-            return True
-
-        provider = detect_provider_from_key(new_key)
-        if not provider:
-            print_warning("Anahtarın hangi servise ait olduğu formatından anlaşılamadı.")
-            choice = input(
-                f"{Fore.GREEN}Servisi seçin: [1] Gemini  [2] OpenAI  [3] Anthropic  [ENTER = vazgeç]: {Style.RESET_ALL}"
-            ).strip()
-            provider = {"1": "gemini", "2": "openai", "3": "anthropic"}.get(choice)
-            if not provider:
-                print_info("İşlem iptal edildi.")
-                maybe_pause()
-                return True
-
-        all_keys = save_ai_api_key(new_key, provider)
-        print_success(
-            f"{provider_labels[provider]} API anahtarı kaydedildi (bu sağlayıcıda toplam {len(all_keys)} anahtar)."
-        )
         maybe_pause()
         return True
 

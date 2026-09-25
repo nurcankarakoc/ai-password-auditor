@@ -21,8 +21,18 @@ wordlists/generated/
 reports/*.json
 reports/*.html
 
+# Kullanıcının kendi oluşturduğu hedef profilleri (gerçek isim/tarih içerebilir —
+# GitHub'a asla otomatik gitmemeli). tests/fixtures/ farklıdır, o hep commit'lenir.
+data/synthetic_profiles/*.json
+
 # Yerel AI modeli (isteğe bağlı, setup_local_ai.py ile indirilir, ~1GB)
 models/
+
+# .exe derleme çıktıları (bkz. build_exe.py) — GitHub Releases'e otomatik yüklenir,
+# repoya commit edilmez.
+build/
+dist/
+*.spec
 
 # IDE / OS
 .vscode/

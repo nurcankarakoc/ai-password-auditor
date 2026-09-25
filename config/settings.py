@@ -6,6 +6,7 @@ Pydantic tabanlı tip doğrulaması ve konfigürasyon yükleyici.
 from pathlib import Path
 import json
 import os
+import sys
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
@@ -66,19 +67,6 @@ class AppSettings(BaseModel):
     wordlist: WordlistConfig = Field(default_factory=WordlistConfig)
     rules: RulesConfig = Field(default_factory=RulesConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
-    gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API Anahtarı (geriye dönük uyumluluk için: listedeki ilk anahtar)")
-    gemini_api_keys: List[str] = Field(
-        default_factory=list,
-        description="Google Gemini API anahtarları listesi. Bir anahtarın kotası dolduğunda otomatik olarak sıradakine geçilir."
-    )
-    openai_api_keys: List[str] = Field(
-        default_factory=list,
-        description="OpenAI (ChatGPT) API anahtarları listesi. Gemini kullanılamadığında yedek sağlayıcı olarak devreye girer."
-    )
-    anthropic_api_keys: List[str] = Field(
-        default_factory=list,
-        description="Anthropic (Claude) API anahtarları listesi. Gemini kullanılamadığında yedek sağlayıcı olarak devreye girer."
-    )
 
     @field_validator("log_level")
     @classmethod
@@ -90,9 +78,49 @@ class AppSettings(BaseModel):
         return upper_v
 
 
+def _detect_base_dir() -> Path:
+    """
+    Proje kök dizinini tespit eder. PyInstaller ile donmuş (frozen) bir .exe olarak
+    çalışırken normal `__file__` bir geçici çıkarma klasörünü (sys._MEIPASS) gösterir;
+    oraya yazılan hiçbir şey (üretilen wordlist, kayıtlı hedef, log vb.) uygulama
+    kapanınca SİLİNİR. Bu yüzden donmuş modda BASE_DIR, .exe dosyasının bulunduğu
+    KALICI klasör olarak ayarlanır — kullanıcı verisi hep orada kalır.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
 # Proje kök dizini tespiti
-BASE_DIR: Path = Path(__file__).resolve().parent.parent
+BASE_DIR: Path = _detect_base_dir()
 CONFIG_FILE_PATH: Path = BASE_DIR / "config" / "config.json"
+
+
+def _ensure_seed_data_when_frozen() -> None:
+    """
+    Donmuş bir .exe ilk kez (kalıcı klasöründe henüz dosyalar yokken) çalıştırıldığında,
+    pakete gömülü varsayılan wordlist/config kopyalarını .exe'nin yanındaki kalıcı
+    klasöre çıkarır. Yalnızca dosya YOKSA kopyalar — kullanıcının sonradan düzenlediği
+    veya sildiği bir dosyanın üzerine asla yazmaz. Herhangi bir hata sessizce yutulur
+    (en kötü ihtimalle varsayılan liste boş/eksik kalır, uygulama yine de açılır).
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    bundled_root = Path(getattr(sys, "_MEIPASS", BASE_DIR))
+    seed_pairs = [
+        (bundled_root / "wordlists" / "default.txt", BASE_DIR / "wordlists" / "default.txt"),
+        (bundled_root / "config" / "config.json", BASE_DIR / "config" / "config.json"),
+    ]
+    for src, dst in seed_pairs:
+        try:
+            if src.is_file() and not dst.is_file():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(src.read_bytes())
+        except Exception:
+            pass
+
+
+_ensure_seed_data_when_frozen()
 
 
 def _load_dotenv_file(env_path: Path) -> None:
@@ -135,25 +163,6 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
             # Yapılandırma bozuksa konsola bilgi verip varsayılanlara düşeriz
             print(f"[UYARI] Konfigürasyon dosyası okunamadı ({e}). Varsayılan ayarlar yükleniyor.")
 
-    # Ortam değişkenlerinden hassas anahtarları çek. {PREFIX}_API_KEYS (çoğul, virgülle
-    # ayrılmış) varsa öncelik onundur; yoksa tekil {PREFIX}_API_KEY tek elemanlı liste olur.
-    # Üç sağlayıcı (Gemini, OpenAI, Anthropic) için aynı desen tekrarlanır.
-    for env_prefix, settings_field in (
-        ("GEMINI", "gemini_api_keys"), ("OPENAI", "openai_api_keys"), ("ANTHROPIC", "anthropic_api_keys")
-    ):
-        env_keys = os.getenv(f"{env_prefix}_API_KEYS")
-        env_key = os.getenv(f"{env_prefix}_API_KEY")
-        if env_keys:
-            key_list = [k.strip() for k in env_keys.split(",") if k.strip()]
-            if key_list:
-                data[settings_field] = key_list
-        elif env_key:
-            data[settings_field] = [env_key]
-
-    # gemini_api_key (tekil) geriye dönük uyumluluk alanı: listedeki ilk anahtar.
-    if data.get("gemini_api_keys"):
-        data["gemini_api_key"] = data["gemini_api_keys"][0]
-
     env_log_level = os.getenv("SPA_LOG_LEVEL")
     if env_log_level:
         data["log_level"] = env_log_level
@@ -168,80 +177,6 @@ def load_settings(config_path: Optional[Path] = None) -> AppSettings:
 
 
 ENV_FILE_PATH: Path = BASE_DIR / ".env"
-
-
-# Sağlayıcı adı -> (settings alanı, .env değişken öneki) eşlemesi.
-_PROVIDER_FIELD_MAP = {
-    "gemini": ("gemini_api_keys", "GEMINI"),
-    "openai": ("openai_api_keys", "OPENAI"),
-    "anthropic": ("anthropic_api_keys", "ANTHROPIC"),
-}
-
-
-def detect_provider_from_key(api_key: str) -> Optional[str]:
-    """
-    Bir API anahtarının biçiminden hangi sağlayıcıya ait olduğunu tahmin eder.
-    - Anthropic: 'sk-ant-' ile başlar (OpenAI'nin 'sk-' önekinin üst kümesi
-      olduğu için ÖNCE kontrol edilmeli).
-    - OpenAI: 'sk-' ile başlar.
-    - Gemini: 'AIzaSy' (klasik format) veya 'AQ.' (bu oturumda doğrulanan
-      yeni format) ile başlar.
-    Hiçbiri eşleşmezse None döner (çağıran taraf kullanıcıya sorar).
-    """
-    key = api_key.strip()
-    if key.startswith("sk-ant-"):
-        return "anthropic"
-    if key.startswith("sk-"):
-        return "openai"
-    if key.startswith("AIzaSy") or key.startswith("AQ."):
-        return "gemini"
-    return None
-
-
-def save_ai_api_key(api_key: str, provider: str, replace: bool = False) -> List[str]:
-    """
-    Verilen sağlayıcının ('gemini'/'openai'/'anthropic') API anahtarını .env dosyasına
-    kalıcı olarak yazar (config.json GİBİ git'e eklenen bir dosyaya DEĞİL — .env
-    .gitignore'da tanımlıdır, böylece anahtar asla yanlışlıkla commit edilmez) ve
-    çalışan süreçteki global `settings` nesnesini günceller.
-
-    Varsayılan olarak EKLER (replace=False): birden fazla ücretsiz-katman anahtarınız
-    varsa, biri kota sınırına ulaştığında ilgili provider otomatik olarak sıradakine
-    geçebilsin diye hepsi saklanır. replace=True verilirse mevcut anahtarların yerine
-    sadece bu tek anahtar yazılır.
-    Döndürülen değer: bu sağlayıcı için kayıtlı tüm anahtarların (bu yenisi dahil) listesi.
-    """
-    settings_field, env_prefix = _PROVIDER_FIELD_MAP[provider]
-    existing = list(getattr(settings, settings_field)) if not replace else []
-    if api_key not in existing:
-        existing.append(api_key)
-
-    keys_var = f"{env_prefix}_API_KEYS"
-    key_var = f"{env_prefix}_API_KEY"
-    lines = []
-    if ENV_FILE_PATH.is_file():
-        with open(ENV_FILE_PATH, "r", encoding="utf-8") as f:
-            lines = [
-                line.rstrip("\n") for line in f
-                if not line.strip().startswith(f"{key_var}=") and not line.strip().startswith(f"{keys_var}=")
-            ]
-
-    lines.append(f"{keys_var}={','.join(existing)}")
-
-    with open(ENV_FILE_PATH, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-
-    os.environ[keys_var] = ",".join(existing)
-    os.environ.pop(key_var, None)
-    setattr(settings, settings_field, existing)
-    if provider == "gemini":
-        settings.gemini_api_key = existing[0] if existing else None
-    return existing
-
-
-def save_gemini_api_key(api_key: str, replace: bool = False) -> List[str]:
-    """Geriye dönük uyumluluk sarmalayıcısı: save_ai_api_key(api_key, 'gemini')."""
-    return save_ai_api_key(api_key, "gemini", replace=replace)
 
 
 # Singleton benzeri global settings nesnesi

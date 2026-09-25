@@ -1,14 +1,13 @@
 """
-Cybzenor - Bulut AI Sağlayıcıları için Ortak Taban Sınıf
-Gemini, OpenAI ve Anthropic gibi farklı bulut AI servislerinin PAYLAŞTIĞI tüm mantığı
-(3 katmanlı yedekleme zinciri, anahtar rotasyonu, devre kesici, zenginleştirme,
-yerel LLM/statik motor fallback'leri) barındırır. Alt sınıflar sadece "buluta nasıl
-konuşulur" kısmını (5 abstract metot) uygular.
+Cybzenor - Yerel AI Sağlayıcısı
+Hiçbir bulut API anahtarı gerektirmeyen tek AI sağlayıcısı: önce yerel küçük dil
+modelini (GGUF, llama.cpp üzerinden, bkz. ai/local_llm_engine.py) dener, model
+indirilmemiş/kütüphane kurulu değilse (veya arızi bir çağrı başarısız olursa)
+sessizce her zaman çalışan deterministik kural/sözlük motoruna düşer.
 """
 
 import re
 import time
-from abc import abstractmethod
 from typing import Optional
 from utils.logger import logger
 from ai.base import BaseAIProvider
@@ -24,108 +23,62 @@ def _normalize_tr(text: str) -> str:
     return text.translate(_TR_ASCII_MAP)
 
 
+def _coerce_to_list(data) -> Optional[list]:
+    """
+    Bir liste bekleyen çağrılar için (çağrışım/kök/tahmin üretimi), küçük yerel modelin
+    talimata rağmen düz bir JSON dizisi yerine onu bir nesnenin içine sarmasını (örn.
+    {"results": [...]} veya {"kelimeler": [...]}) tolere eder — nesnenin değerleri
+    arasındaki İLK listeyi bulup döner. Liste bulunamazsa None döner.
+    """
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for value in data.values():
+            if isinstance(value, list):
+                return value
+    return None
+
+
 # Süreç genelinde PAYLAŞILAN devre kesici durumu: main.py ve RankingEngine gibi farklı
 # yerler ayrı ayrı provider nesneleri oluşturuyor. Bu bayrak nesne-bazlı olsaydı (instance
-# attribute), bir kesinti sırasında her yeni provider nesnesi baştan denemek zorunda kalırdı.
-# cloud_down_until sağlayıcı adına göre (Gemini/OpenAI/Anthropic) AYRI tutulur — biri düşünce
-# diğerleri de "düşmüş" sayılmasın diye.
+# attribute), bir arızi hata sonrası her yeni provider nesnesi baştan denemek zorunda kalırdı.
 _DOWN_COOLDOWN_SECONDS = 60
-_provider_state = {"cloud_down_until": {}, "local_llm_down_until": 0.0}
+_provider_state = {"local_llm_down_until": 0.0}
 
 
-class CloudAIProviderBase(BaseAIProvider):
+class LocalAIProvider(BaseAIProvider):
     """
-    Tüm bulut AI sağlayıcılarının ortak davranışı. Alt sınıflar şunları uygulamak zorunda:
-    PROVIDER_LABEL (sınıf sabiti), _init_client(key), _extract_via_cloud(raw_text),
-    _generate_roots_via_cloud(profile), _expand_associations_via_cloud(term),
-    _infer_via_cloud(category, profile), _detect_unknown_categories_via_cloud(raw_text).
+    Yerel küçük dil modeli -> deterministik kural motoru iki katmanlı yedekleme
+    zinciriyle çalışan, herhangi bir bulut API anahtarı gerektirmeyen sağlayıcı.
     """
 
-    PROVIDER_LABEL: str = "AI"
+    PROVIDER_LABEL = "Yerel AI"
 
-    def _rotate_to_next_key(self) -> bool:
-        """Kota dolduğunda listedeki bir sonraki anahtara geçer. Başka anahtar yoksa False döner."""
-        self._key_index += 1
-        if self._key_index >= len(self._keys):
-            return False
-        return self._init_client(self._keys[self._key_index])
+    def __init__(self) -> None:
+        super().__init__(api_key=None)
 
     def is_available(self) -> bool:
-        """API anahtarı ve istemci geçerli mi (ve şu an süreç genelinde 'düşmüş' değil mi)?"""
-        down_until = _provider_state["cloud_down_until"].get(self.PROVIDER_LABEL, 0.0)
-        return bool(self._client and self.api_key) and time.time() >= down_until
+        """Yerel dil modeli kütüphanesi kurulu mu ve model dosyası indirilmiş mi (ve şu an 'düşmüş' değil mi)?"""
+        return local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]
 
-    @abstractmethod
-    def _init_client(self, key: str) -> bool:
-        """Verilen anahtarla istemciyi kurar. Başarılıysa True döner."""
-        raise NotImplementedError
-
-    # Bu anahtar kelimeleri içeren hatalar geçici kabul edilir (sunucu yoğunluğu, zaman
-    # aşımı vb.) ve birkaç kez tekrar denenir; kalıcı hatalarda tekrar denemek zaman
-    # kaybıdır, o durumda tek denemede yerel modele geçilir.
-    _TRANSIENT_ERROR_HINTS = ("503", "unavailable", "timeout", "deadline", "connection")
-    # Bazı SDK'lar (openai.APITimeoutError, anthropic.APITimeoutError, httpx.*Timeout) zaman
-    # aşımını mesaj metninde değil İSTİSNA SINIFI adında belirtir; bu yüzden tip adına da bakılır.
-    _TRANSIENT_EXCEPTION_TYPE_HINTS = ("timeout", "connectionerror", "connecttimeout", "readtimeout")
-    # Kota/rate-limit hataları AYRI ele alınır: birkaç saniye içinde kendiliğinden düzelmezler.
-    _QUOTA_ERROR_HINTS = ("resource_exhausted", "quota", "429", "rate_limit", "insufficient_quota")
-    _QUOTA_COOLDOWN_SECONDS = 300
-    # Bir bulut çağrısının ağ isteği bu kadar saniye içinde yanıt vermezse zaman aşımına
-    # uğrar (SDK istemcisi kurulurken uygulanır) — aksi halde ağ takılırsa kullanıcı süresiz
-    # bekleyebilir, çünkü hiçbir istisna fırlatılmaz ve tekrar deneme/rotasyon devreye giremez.
-    _HTTP_TIMEOUT_SECONDS = 20
-
-    def _cascade(self, cloud_fn, local_fn, fallback_fn, label: str, gemini_retries: int = 3, retry_delay_seconds: float = 2.0):
+    def has_real_ai(self) -> bool:
         """
-        Üç katmanlı yedekleme zinciri: Bulut AI (varsa) -> Yerel küçük dil modeli
-        (indirilmişse) -> her zaman çalışan statik kural motoru.
+        Public: main.py gibi dış çağıranların gerçek yapay zeka kullanılabilirliğini
+        sorgulaması için. NOT: _provider_state["local_llm_down_until"] (geçici soğuma)
+        KASITLI OLARAK burada kontrol EDİLMEZ — bkz. _cascade docstring'i.
         """
-        if self.is_available():
-            last_exception: Optional[Exception] = None
-            is_quota_error = False
-            while True:  # her anahtar için bir tur
-                is_quota_error = False
-                for attempt in range(gemini_retries):
-                    try:
-                        return cloud_fn()
-                    except Exception as e:
-                        last_exception = e
-                        err_lower = str(e).lower()
-                        exc_type_lower = type(e).__name__.lower()
-                        is_quota_error = any(hint in err_lower for hint in self._QUOTA_ERROR_HINTS)
-                        is_transient = not is_quota_error and (
-                            any(hint in err_lower for hint in self._TRANSIENT_ERROR_HINTS)
-                            or any(hint in exc_type_lower for hint in self._TRANSIENT_EXCEPTION_TYPE_HINTS)
-                        )
-                        logger.debug(f"{self.PROVIDER_LABEL} {label} denemesi {attempt + 1}/{gemini_retries} başarısız ({e}).")
-                        if is_quota_error or not is_transient or attempt == gemini_retries - 1:
-                            break
-                        time.sleep(retry_delay_seconds)
+        return local_llm_engine.is_available()
 
-                if is_quota_error and self._rotate_to_next_key():
-                    from utils.platform_helper import print_info
-                    print_info(
-                        f"Bu {self.PROVIDER_LABEL} API anahtarının kotası doldu, sıradaki anahtara geçiliyor "
-                        f"({self._key_index + 1}/{len(self._keys)})..."
-                    )
-                    continue
-                break
+    def _has_real_ai(self) -> bool:
+        return self.has_real_ai()
 
-            logger.debug(f"{self.PROVIDER_LABEL} {label} başarısız oldu ({last_exception}). Yerel model deneniyor.")
-            if time.time() >= _provider_state["cloud_down_until"].get(self.PROVIDER_LABEL, 0.0):
-                from utils.platform_helper import print_info
-                if is_quota_error:
-                    extra = f" Birden fazla ücretsiz anahtar eklemek için 'apikey' komutunu tekrar kullanabilirsiniz." if len(self._keys) <= 1 else ""
-                    print_info(
-                        f"Kayıtlı {'tek ' if len(self._keys) <= 1 else 'tüm '}{self.PROVIDER_LABEL} API anahtar{'ının' if len(self._keys) <= 1 else 'larının'} "
-                        f"kotası doldu. Yerel motora geçildi. Kota genelde birkaç saat içinde sıfırlanır.{extra}"
-                    )
-                else:
-                    print_info(f"{self.PROVIDER_LABEL} API şu an yanıt vermiyor, yerel motora geçildi.")
-            _provider_state["cloud_down_until"][self.PROVIDER_LABEL] = time.time() + (
-                self._QUOTA_COOLDOWN_SECONDS if is_quota_error else _DOWN_COOLDOWN_SECONDS
-            )
+    _HTTP_TIMEOUT_SECONDS = 20  # Uyumluluk için (ileride ağ tabanlı yerel motor eklenirse)
 
+    def _cascade(self, local_fn, fallback_fn, label: str):
+        """
+        İki katmanlı yedekleme zinciri: Yerel küçük dil modeli (indirilmişse) -> her
+        zaman çalışan statik kural motoru.
+        """
         if local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]:
             try:
                 return local_fn()
@@ -135,40 +88,15 @@ class CloudAIProviderBase(BaseAIProvider):
 
         return fallback_fn()
 
-    def _has_real_ai(self) -> bool:
-        """Bu bulut sağlayıcı veya yerel dil modelinden en az biri gerçekten kullanılabilir mi?"""
-        return self.has_real_ai()
-
-    def has_real_ai(self) -> bool:
-        """
-        Public: main.py gibi dış çağıranların anahtarın salt VAR OLMASI yerine gerçek
-        kullanılabilirliği sorgulaması için — istemci kurulumu başarısız olduysa burada
-        da yansır.
-
-        NOT: yerel model için _provider_state["local_llm_down_until"] (geçici soğuma)
-        KASITLI OLARAK burada kontrol EDİLMEZ. Bu bayrak, TEK bir arızi çağrı
-        başarısız olduğunda 60sn'liğine "düşmüş" işaretlenir; eğer burada da
-        kontrol edilseydi, o 60sn boyunca has_real_ai() False dönerdi ve
-        infer_unknown_values/expand_associations gibi metotlar _cascade()'e hiç
-        girmeden erkenden boş liste dönerdi — hâlbuki _cascade() zaten bu durumda
-        (yerel model soğumadayken) güvenli/deterministik sözlük tabanlı fallback'e
-        düşecekti. Sonuç: aynı girdi bazen tahmin üretir bazen üretmezdi (kullanıcı
-        raporu: "köpeği var" dediğinde bazen isim önerisi geliyor bazen gelmiyor).
-        Burada sadece PAKETİN/MODELİN kurulu olup olmadığına bakılır.
-        """
-        return self.is_available() or local_llm_engine.is_available()
-
     def extract_target_profile(self, raw_text: str) -> TargetProfile:
         """
-        Girdiyi analiz eder. Bulut sağlayıcı erişilebilir ise onu kullanır.
-        Erişilemez veya hata verirse otomatik olarak yerel modele/deterministik
-        fallback motoruna geçer.
+        Girdiyi analiz eder. Yerel dil modeli kullanılabilirse onu dener, aksi halde
+        veya hata verirse deterministik fallback motoruna geçer.
         """
         if not raw_text or not raw_text.strip():
             return TargetProfile()
 
         profile = self._cascade(
-            cloud_fn=lambda: self._extract_via_cloud(raw_text),
             local_fn=lambda: self._extract_via_local_llm(raw_text),
             fallback_fn=lambda: self._extract_via_fallback(raw_text),
             label="profil çıkarımı"
@@ -182,11 +110,14 @@ class CloudAIProviderBase(BaseAIProvider):
         profile.interests = self._filter_noise_values(profile.interests)
         profile.keywords = self._filter_noise_values(profile.keywords)
 
-        # Kategori tahmini (evcil hayvan/çocuk/lakap ismi) ve ilgi alanı çağrışımı (kahve->latte)
-        # sadece gerçek bir AI (bulut veya yerel model) varken yapılır.
-        if self._has_real_ai():
-            profile = self._enrich_with_unknown_category_guesses(raw_text, profile)
-            profile = self._enrich_with_interest_associations(profile)
+        # Kategori tahmini (evcil hayvan/çocuk/lakap ismi) ve ilgi alanı çağrışımı (kahve->latte,
+        # anime->Naruto vb.) her zaman denenir: yerel AI varsa onu kullanır, yoksa/hata verirse
+        # her ikisi de KESİN eşleşen (anime, kahve, evcil hayvan ismi gibi her zaman doğru olan)
+        # sözlük kategorilerine sessizce düşer (bkz. expand_associations/infer_unknown_values).
+        # Böylece "köpeği var" gibi basit ama çok değerli bir ipucu, AI kurulu olmasa bile en
+        # bilindik köpek isimleriyle karşılık bulur.
+        profile = self._enrich_with_unknown_category_guesses(raw_text, profile)
+        profile = self._enrich_with_interest_associations(profile)
         return profile
 
     # Türkçe bağlaç/edat/zamir gibi, tek başına hiçbir kişiye özel anlam taşımayan ve
@@ -211,10 +142,6 @@ class CloudAIProviderBase(BaseAIProvider):
                 continue
             cleaned.append(v)
         return cleaned
-
-    @abstractmethod
-    def _extract_via_cloud(self, raw_text: str) -> TargetProfile:
-        raise NotImplementedError
 
     # Takım/kulüp anahtar kelimeleri: bunlar zaten ranking_engine/candidate_generator'daki
     # özel takım-yılı mantığıyla işleniyor, bu yüzden genel çağrışım genişletmesine dahil edilmez.
@@ -269,36 +196,56 @@ class CloudAIProviderBase(BaseAIProvider):
     def expand_associations(self, term: str, profile: TargetProfile) -> list[str]:
         """
         Bir ilgi alanı/kişilik özelliği kelimesini, onunla anlamsal olarak ilişkili
-        somut/özel kelimelere genişletir (örn: 'kahve' -> 'latte', 'americano').
-        Gerçek bir AI (bulut/yerel model) yoksa boş liste döner — statik sözlük tek
-        başına alakasız/Türkçe'ye uygun olmayan kelimeler üretebildiği için, bu kural
-        çağıran her yerden bağımsız olarak burada da zorlanır.
+        somut/özel kelimelere genişletir. İki farklı türde girdiyle karşılaşabilir:
+        - Soyut bir kavram/duygu (örn. 'kahve', 'neseli') -> genel çağrışım kelimeleri.
+        - GERÇEK, tanınabilir bir varlık (bir sanatçı/oyuncu/sporcu ismi, bir anime/dizi/
+          film/oyun/kitap adı vb., örn. 'tarkan', 'naruto') -> o varlığa özgü GERÇEK
+          isimler (şarkı adları, karakter adları, bölüm adları vb.).
+        Yerel AI kuruluysa bu ayrımı kendisi yapar (bkz. _expand_associations_via_local_llm).
+        AI kurulu değilse/hata verirse, sadece KESİN eşleşen (her zaman doğru olan, örn.
+        'kahve'->'Latte') statik sözlük kategorilerine düşülür; eşleşme yoksa boş liste
+        döner — asla uydurma bir isim üretilmez.
         """
         if not self._has_real_ai():
-            return []
+            return self._expand_associations_heuristic(term)
         return self._cascade(
-            cloud_fn=lambda: self._expand_associations_via_cloud(term),
             local_fn=lambda: self._expand_associations_via_local_llm(term),
             fallback_fn=lambda: self._expand_associations_heuristic(term),
             label=f"'{term}' çağrışım genişletmesi"
         )
 
-    @abstractmethod
-    def _expand_associations_via_cloud(self, term: str) -> list[str]:
-        raise NotImplementedError
-
     def _expand_associations_via_local_llm(self, term: str) -> list[str]:
-        system = "Sen bir parola tahmin uzmanısın. Sadece istenen JSON liste formatında yanıt ver, başka açıklama ekleme."
-        user = (
-            f"Örnek girdi: 'kahve' -> Örnek çıktı: [\"latte\", \"americano\", \"espresso\", \"mocha\", \"filtrekahve\"]\n"
-            f"Örnek girdi: 'neseli' -> Örnek çıktı: [\"enerji\", \"pembe\", \"mutlu\", \"gulen\", \"nese\"]\n\n"
-            f"Şimdi gerçek girdi: '{term}'\n"
-            f"Bununla anlamsal olarak ilişkili, YUKARIDAKİ ÖRNEKLERİ KOPYALAMADAN, '{term}' kelimesine özgü "
-            f"10 adet SOMUT kelime üret. Sadece JSON dizisi olarak yanıt ver, başka hiçbir şey yazma."
+        system = (
+            "Sen hem bir parola tahmin uzmanı hem de geniş genel kültüre sahip bir asistansın. "
+            "Kullanıcının verdiği kelime bazen soyut bir ilgi alanı/duygu, bazen de GERÇEK ve "
+            "TANIDIĞIN bir varlık olabilir: bir sanatçı/şarkıcı/oyuncu/sporcu ismi, bir anime/dizi/"
+            "film/kitap/oyun adı, bir marka, bir spor takımı vb. Eğer terimi GERÇEKTEN tanıyorsan, "
+            "o varlığa özgü GERÇEK ve BİLİNEN isimler ver (örn. bir şarkıcıysa en bilinen şarkı "
+            "adları, bir anime/diziyse en bilinen karakter/bölüm adları, bir sporcuysa kulüp/branş "
+            "ile ilgili terimler) — ASLA uydurma isim üretme, emin değilsen soyut çağrışıma dön. "
+            "Sadece istenen JSON liste formatında yanıt ver, başka açıklama ekleme."
         )
-        data = local_llm_engine.generate_json(system, user, max_tokens=250)
-        if isinstance(data, list):
-            values = [str(x).strip() for x in data if str(x).strip()]
+        user = (
+            f"Örnek girdi: 'kahve' (soyut ilgi alanı) -> "
+            f"Örnek çıktı: [\"latte\", \"americano\", \"espresso\", \"mocha\", \"filtrekahve\"]\n"
+            f"Örnek girdi: 'neseli' (soyut kişilik özelliği) -> "
+            f"Örnek çıktı: [\"enerji\", \"pembe\", \"mutlu\", \"gulen\", \"nese\"]\n"
+            f"Örnek girdi: 'tarkan' (GERÇEK, tanınan bir sanatçı) -> "
+            f"Örnek çıktı: [\"simarik\", \"kuzukuzu\", \"dudu\", \"kissKiss\", \"adimikalbineyaz\"] "
+            f"(kendisine ait GERÇEK şarkı isimleri, uydurma değil)\n"
+            f"Örnek girdi: 'naruto' (GERÇEK, tanınan bir anime) -> "
+            f"Örnek çıktı: [\"sasuke\", \"sakura\", \"kakashi\", \"hokage\", \"konoha\"] "
+            f"(o esere ait GERÇEK karakter/kavram isimleri)\n\n"
+            f"Şimdi gerçek girdi: '{term}'\n"
+            f"Eğer '{term}' tanıdığın GERÇEK bir kişi/eser/marka/takım ismiyse, ona özgü GERÇEK ve "
+            f"BİLİNEN 10 isim/başlık ver. Tanımıyorsan veya soyut bir kavramsa, YUKARIDAKİ ÖRNEKLERİ "
+            f"KOPYALAMADAN '{term}' ile anlamsal olarak ilişkili 10 SOMUT kelime üret. Sadece JSON "
+            f"dizisi olarak yanıt ver, başka hiçbir şey yazma."
+        )
+        data = local_llm_engine.generate_json(system, user, max_tokens=300)
+        items = _coerce_to_list(data)
+        if items is not None:
+            values = [str(x).strip() for x in items if str(x).strip()]
             if values:
                 return values
         raise ValueError("Yerel model geçerli bir çağrışım listesi döndürmedi.")
@@ -348,17 +295,12 @@ class CloudAIProviderBase(BaseAIProvider):
         (aynı cümle farklı çalıştırmalarda AI tarafından bazen yakalanıp bazen kaçırılabiliyor).
         """
         ai_result = self._cascade(
-            cloud_fn=lambda: self._detect_unknown_categories_via_cloud(raw_text),
             local_fn=lambda: self._detect_unknown_categories_via_local_llm(raw_text),
             fallback_fn=lambda: [],
             label="bilinmeyen kategori tespiti"
         )
         heuristic_result = self._detect_unknown_categories_heuristic(raw_text)
         return sorted(set(ai_result) | set(heuristic_result))
-
-    @abstractmethod
-    def _detect_unknown_categories_via_cloud(self, raw_text: str) -> list[str]:
-        raise NotImplementedError
 
     def _detect_unknown_categories_via_local_llm(self, raw_text: str) -> list[str]:
         valid_keys = list(self.CATEGORY_LABELS.keys())
@@ -372,8 +314,9 @@ class CloudAIProviderBase(BaseAIProvider):
         )
         # Olgusal sınıflandırma: metinde ne olduğunu tespit ediyoruz, "yaratıcı" olmamalı.
         data = local_llm_engine.generate_json(system, user, max_tokens=100, temperature=0.1)
-        if isinstance(data, list):
-            return [str(x).strip() for x in data if str(x).strip() in valid_keys]
+        items = _coerce_to_list(data)
+        if items is not None:
+            return [str(x).strip() for x in items if str(x).strip() in valid_keys]
         raise ValueError("Yerel model geçerli bir kategori listesi döndürmedi.")
 
     CATEGORY_EXISTENCE_CUES = {
@@ -402,15 +345,10 @@ class CloudAIProviderBase(BaseAIProvider):
         Hedef profilden anlamsal olarak tutarlı, psikolojik olarak en yüksek olasılıklı kök kalıpları çıkarır.
         """
         return self._cascade(
-            cloud_fn=lambda: self._generate_roots_via_cloud(profile),
             local_fn=lambda: self._generate_roots_via_local_llm(profile),
             fallback_fn=lambda: self._generate_roots_via_heuristic(profile),
             label="semantik kök üretimi"
         )
-
-    @abstractmethod
-    def _generate_roots_via_cloud(self, profile: TargetProfile) -> list[str]:
-        raise NotImplementedError
 
     def _generate_roots_via_local_llm(self, profile: TargetProfile) -> list[str]:
         system = "Sen bir siber güvenlik denetim uzmanısın. Sadece istenen JSON liste formatında yanıt ver."
@@ -438,8 +376,9 @@ class CloudAIProviderBase(BaseAIProvider):
             f"{club_rule} Sadece JSON dizisi olarak yanıt ver, başka hiçbir şey yazma."
         )
         data = local_llm_engine.generate_json(system, user, max_tokens=900)
-        if isinstance(data, list):
-            values = [str(x).strip() for x in data if str(x).strip()]
+        items = _coerce_to_list(data)
+        if items is not None:
+            values = [str(x).strip() for x in items if str(x).strip()]
             if values:
                 return self._filter_irrelevant_club_references(values, profile)
         raise ValueError("Yerel model geçerli bir kök listesi döndürmedi.")
@@ -494,21 +433,18 @@ class CloudAIProviderBase(BaseAIProvider):
     def infer_unknown_values(self, category: str, profile: TargetProfile) -> list[str]:
         """
         Bilinmeyen bir kategori (ör. isimi bilinmeyen evcil hayvan) için en olası değerleri tahmin eder.
-        Gerçek bir AI (bulut/yerel model) yoksa boş liste döner — bkz. expand_associations
-        docstring'indeki aynı gerekçe.
+        Yerel AI kuruluysa profile özel (isim/tarih/konuma göre) tahmin yapar. AI kurulu değilse/
+        hata verirse, Türkiye bağlamında EN BİLİNDİK sabit değer listesine (CATEGORY_HEURISTIC_VALUES)
+        düşülür — böylece örn. "köpeği var" ipucu, AI kurulu olmasa bile en yaygın köpek isimleriyle
+        (Boncuk, Karabaş, Pamuk...) karşılık bulur.
         """
         if not self._has_real_ai():
-            return []
+            return self._infer_via_heuristic(category)
         return self._cascade(
-            cloud_fn=lambda: self._infer_via_cloud(category, profile),
             local_fn=lambda: self._infer_via_local_llm(category, profile),
             fallback_fn=lambda: self._infer_via_heuristic(category),
             label=f"'{category}' kategori tahmini"
         )
-
-    @abstractmethod
-    def _infer_via_cloud(self, category: str, profile: TargetProfile) -> list[str]:
-        raise NotImplementedError
 
     def _infer_via_local_llm(self, category: str, profile: TargetProfile) -> list[str]:
         label = self.CATEGORY_LABELS.get(category, category)
@@ -522,8 +458,9 @@ class CloudAIProviderBase(BaseAIProvider):
             f"EN OLASI 12 değeri tahmin et. Sadece JSON dizisi olarak yanıt ver, başka hiçbir şey yazma."
         )
         data = local_llm_engine.generate_json(system, user, max_tokens=350)
-        if isinstance(data, list):
-            values = [str(x).strip() for x in data if str(x).strip()]
+        items = _coerce_to_list(data)
+        if items is not None:
+            values = [str(x).strip() for x in items if str(x).strip()]
             if values:
                 return values
         raise ValueError("Yerel model geçerli bir tahmin listesi döndürmedi.")
@@ -659,7 +596,7 @@ class CloudAIProviderBase(BaseAIProvider):
 
     def _extract_via_fallback(self, raw_text: str) -> TargetProfile:
         """
-        API olmadığında veya çöktüğünde regex ve sözlük tabanlı çalışan
+        Yerel model olmadığında veya çöktüğünde regex ve sözlük tabanlı çalışan
         çevrimdışı (offline) deterministik kural motoru.
         """
 
@@ -757,3 +694,7 @@ class CloudAIProviderBase(BaseAIProvider):
             relations=relations,
             keywords=sorted(list(keywords))
         )
+
+
+# Süreç genelinde paylaşılan tek örnek (her çağrıda yeniden oluşturulmaz)
+local_ai_provider = LocalAIProvider()

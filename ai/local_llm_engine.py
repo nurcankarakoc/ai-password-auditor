@@ -1,9 +1,9 @@
 """
 Cybzenor - Yerel Küçük Dil Modeli Motoru (Local LLM Engine)
-Gemini API anahtarı olmayan kullanıcılar için, tamamen offline çalışan küçük bir
+Herhangi bir bulut API anahtarı gerektirmeyen, tamamen offline çalışan küçük bir
 dil modeliyle (GGUF, llama.cpp üzerinden) OSINT metni anlama ve kelime çağrışımı
 üretme yeteneği sağlar. Model indirilmemiş veya kütüphane kurulu değilse sessizce
-devre dışı kalır; çağıran taraf (GeminiAIProvider) bu durumda statik kural motoruna düşer.
+devre dışı kalır; çağıran taraf (LocalAIProvider) bu durumda statik kural motoruna düşer.
 """
 
 import json
@@ -21,6 +21,43 @@ from utils.logger import logger
 DEFAULT_REPO_ID = "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
 DEFAULT_FILENAME = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
 MODELS_DIR = BASE_DIR / "models"
+
+
+def _parse_json_leniently(text: str) -> Any:
+    """
+    Küçük yerel modelin yanıtından JSON çıkarır. Model iki tür hata yapabiliyor:
+    (1) İstenen düz JSON dizisi yerine onu bir nesnenin içine sarmak
+        (örn. {"bilinen": ["a", "b"]} yerine ["a", "b"] istenmişti), veya
+    (2) Sözdizimi hatalı, kusurlu JSON üretmek (kaçak virgül/parantez gibi).
+    Önce standart (sıkı) ayrıştırma denenir; başarısız olursa metindeki İLK köşeli
+    parantez bloğunu ([...], nesnenin içinde iç içe olsa bile) bulup onu ayrıştırmayı
+    dener; o da bozuksa son çare olarak bloktaki tüm tırnaklı string'leri (madde
+    listesi öğeleri) regex ile tek tek çıkarır. Hiçbiri işe yaramazsa ValueError fırlatır.
+    """
+    # 1. Sıkı deneme: metindeki ilk [...] veya {...} bloğunu olduğu gibi ayrıştır.
+    match = re.search(r'(\[.*\]|\{.*\})', text, re.DOTALL)
+    if not match:
+        raise ValueError(f"Yerel model yanıtında JSON bulunamadı: {text[:200]}")
+    block = match.group(1)
+    try:
+        return json.loads(block)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Model, istenen diziyi bir nesnenin içine sarmış olabilir — nesnenin İÇİNDEKİ
+    #    ilk [...] dizisini ayrıca dener (örn. {"bilinen": [...]} -> [...]).
+    inner_match = re.search(r'\[.*\]', block, re.DOTALL)
+    if inner_match:
+        try:
+            return json.loads(inner_match.group(0))
+        except json.JSONDecodeError:
+            # 3. Son çare: dizi bloğu sözdizimsel olarak bozuk (kaçak virgül/parantez
+            #    gibi) ama içindeki tırnaklı string öğeleri hâlâ okunabilir durumda.
+            items = re.findall(r'"([^"]{1,80})"', inner_match.group(0))
+            if items:
+                return items
+
+    raise ValueError(f"Yerel model geçerli/ayrıştırılabilir bir JSON döndürmedi: {text[:200]}")
 
 
 class LocalLLMEngine:
@@ -95,11 +132,7 @@ class LocalLLMEngine:
             temperature=temperature,
         )
         text = response["choices"][0]["message"]["content"]
-
-        match = re.search(r'(\[.*\]|\{.*\})', text, re.DOTALL)
-        if not match:
-            raise ValueError(f"Yerel model yanıtında JSON bulunamadı: {text[:200]}")
-        return json.loads(match.group(1))
+        return _parse_json_leniently(text)
 
 
 def download_model(repo_id: str = DEFAULT_REPO_ID, filename: str = DEFAULT_FILENAME) -> Path:
@@ -124,5 +157,5 @@ def download_model(repo_id: str = DEFAULT_REPO_ID, filename: str = DEFAULT_FILEN
     return Path(downloaded_path)
 
 
-# Global singleton örneği (GeminiAIProvider tarafından paylaşılır, her çağrıda yeniden yüklenmez)
+# Global singleton örneği (LocalAIProvider tarafından paylaşılır, her çağrıda yeniden yüklenmez)
 local_llm_engine = LocalLLMEngine()

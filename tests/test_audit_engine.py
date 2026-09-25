@@ -65,9 +65,11 @@ class TestLocalHashAuditEngine:
     def test_synthetic_target_profile_audit(self, audit_engine: LocalHashAuditEngine, tmp_path: Path):
         """Sentetik profil dosyasındaki hedef hash'in denetlendiğini test et."""
         import json
-        from config.settings import BASE_DIR
 
-        profile_path = BASE_DIR / "data" / "synthetic_profiles" / "target_01.json"
+        # Bu sabit fixture, kullanıcının GUI'de gördüğü data/synthetic_profiles/ klasörü
+        # DIŞINDA (tests/fixtures/) tutulur — aksi halde CLI/GUI'de gerçek bir hedef gibi
+        # görünüp kullanıcı tarafından yanlışlıkla silinebiliyordu (bkz. proje geçmişi).
+        profile_path = Path(__file__).resolve().parent / "fixtures" / "target_01.json"
         assert profile_path.is_file()
 
         with open(profile_path, "r", encoding="utf-8") as f:

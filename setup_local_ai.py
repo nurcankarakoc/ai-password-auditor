@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Cybzenor - Yerel AI Motoru Kurulum Betiği (İsteğe Bağlı)
-Gemini API anahtarı olmadan da gerçek bir yapay zeka kullanmak isteyenler için:
-küçük bir yerel dil modelini (GGUF, ~1GB) indirir. Bu betik çalıştırılmazsa
-Cybzenor normal şekilde çalışmaya devam eder (statik kural motoruna düşer).
+Herhangi bir bulut API anahtarı gerektirmeden gerçek bir yapay zeka kullanmak
+isteyenler için: küçük bir yerel dil modelini (GGUF, ~1GB) indirir. Bu betik
+çalıştırılmazsa Cybzenor normal şekilde çalışmaya devam eder (statik kural motoruna düşer).
 
 Kullanım:
     python setup_local_ai.py
@@ -74,7 +74,7 @@ def main() -> None:
     if not download_model():
         sys.exit(1)
 
-    print("\n[+] Kurulum tamamlandı! Artık Gemini API anahtarı olmadan da Cybzenor")
+    print("\n[+] Kurulum tamamlandı! Cybzenor artık hiçbir bulut API anahtarı olmadan")
     print("    yerel yapay zeka motorunu otomatik olarak kullanacaktır.")
 
 
