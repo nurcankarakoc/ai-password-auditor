@@ -45,10 +45,12 @@ def display_system_status() -> None:
     # hatalıysa (istemci kurulamadıysa) ya da sağlayıcı bu oturumda geçici olarak
     # "düşmüş" işaretliyse, ekran yanlışlıkla "Aktif" göstermesin. Gemini/OpenAI/
     # Anthropic'ten hangisi aktifse (veya anahtarı varsa) o gösterilir.
-    from ai.ai_manager import get_active_ai_provider, any_cloud_ai_configured
+    from ai.ai_manager import get_active_ai_provider, any_cloud_ai_configured, is_missing_dependency_error
     _ai_check = get_active_ai_provider()
     if _ai_check.is_available():
         ai_status = f"{Fore.GREEN}{_ai_check.PROVIDER_LABEL} API Aktif{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
+    elif _ai_check._keys and is_missing_dependency_error(_ai_check):
+        ai_status = f"{Fore.RED}{_ai_check.PROVIDER_LABEL} paketi kurulu değil — 'pip install -r requirements.txt' çalıştırın{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     elif _ai_check._keys and _ai_check.client_init_error:
         ai_status = f"{Fore.RED}{_ai_check.PROVIDER_LABEL} anahtarı geçersiz/başlatılamadı — 'apikey' ile güncelleyin{Style.RESET_ALL}{Fore.LIGHTBLACK_EX}"
     elif any_cloud_ai_configured():
@@ -1418,6 +1420,20 @@ def _offer_api_key_if_ai_down(context: str) -> "BaseAIProvider":
     """
     provider = get_active_ai_provider()
     if provider.is_available():
+        return provider
+
+    # Anahtar zaten kayıtlı ama ilgili SDK paketi bu makinede kurulu değilse (örn.
+    # kodu 'git pull' ile başka bir makineye taşıyıp 'pip install -r requirements.txt'
+    # çalıştırmayı unutmak), yeni bir anahtar eklemek hiçbir şeyi çözmez — asıl sorun
+    # kota/kesinti değil, eksik pakettir. Bu durumda anahtar eklemeyi TEKLİF ETMEDEN
+    # doğru komutu göster.
+    from ai.ai_manager import is_missing_dependency_error
+    if provider._keys and is_missing_dependency_error(provider):
+        print_warning(
+            f"{provider.PROVIDER_LABEL} istemcisi başlatılamadı: gerekli Python paketi bu makinede kurulu "
+            f"değil ({provider.client_init_error}). Yeni bir anahtar eklemek bunu çözmez — terminalde "
+            f"'pip install -r requirements.txt' çalıştırıp tekrar deneyin. Şimdilik yerel/basit motorla devam ediliyor."
+        )
         return provider
 
     reason = (

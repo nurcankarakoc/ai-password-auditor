@@ -34,3 +34,17 @@ def get_active_ai_provider() -> BaseAIProvider:
 def any_cloud_ai_configured() -> bool:
     """En az bir sağlayıcıda kayıtlı anahtar var mı (onboarding ekranı için)."""
     return any(cls()._keys for cls in CLOUD_PROVIDER_CLASSES)
+
+
+def is_missing_dependency_error(provider: BaseAIProvider) -> bool:
+    """
+    client_init_error 'No module named ...' içeriyorsa sorun API anahtarıyla değil,
+    bu makinede ilgili SDK paketinin (google-genai/openai/anthropic) hiç kurulu
+    olmamasıyla ilgilidir — örn. 'git pull' ile yeni kod çekilip 'pip install -r
+    requirements.txt' çalıştırılmamış bir makinede (bkz. farklı makineler arası
+    dağıtım senaryosu). Bu durumda kullanıcıya yeni bir API anahtarı eklemesini
+    önermek yanıltıcıdır (anahtar zaten kayıtlı, sorun paket eksikliği); doğru
+    yönlendirme 'pip install -r requirements.txt' çalıştırmaktır.
+    """
+    err = getattr(provider, "client_init_error", None)
+    return bool(err) and "no module named" in err.lower()
