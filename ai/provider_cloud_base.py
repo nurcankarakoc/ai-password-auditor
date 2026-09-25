@@ -6,6 +6,7 @@ yerel LLM/statik motor fallback'leri) barındırır. Alt sınıflar sadece "bulu
 konuşulur" kısmını (5 abstract metot) uygular.
 """
 
+import re
 import time
 from abc import abstractmethod
 from typing import Optional
@@ -163,12 +164,43 @@ class CloudAIProviderBase(BaseAIProvider):
             label="profil çıkarımı"
         )
 
+        # AI (özellikle küçük yerel model), serbest metindeki bağlaç/edat gibi anlamsız
+        # kelimeleri (ve, ile, da, bir...) sanki kişiye özel bir bilgiymiş gibi isim/ilgi
+        # alanı/anahtar kelime olarak çıkarabiliyor. Bunlar kişiye özel değildir ve parola
+        # tahmininde sadece gürültüye yol açar; burada elenir.
+        profile.names = self._filter_noise_values(profile.names)
+        profile.interests = self._filter_noise_values(profile.interests)
+        profile.keywords = self._filter_noise_values(profile.keywords)
+
         # Kategori tahmini (evcil hayvan/çocuk/lakap ismi) ve ilgi alanı çağrışımı (kahve->latte)
         # sadece gerçek bir AI (bulut veya yerel model) varken yapılır.
         if self._has_real_ai():
             profile = self._enrich_with_unknown_category_guesses(raw_text, profile)
             profile = self._enrich_with_interest_associations(profile)
         return profile
+
+    # Türkçe bağlaç/edat/zamir gibi, tek başına hiçbir kişiye özel anlam taşımayan ve
+    # parola tahmininde sadece gürültü üreten kelimeler. AI çıkarımı bunları yanlışlıkla
+    # isim/ilgi alanı/anahtar kelime sanabiliyor (örn. "Ahmet VE Mehmet" cümlesinde 've'yi).
+    TURKISH_STOPWORDS = {
+        've', 'ile', 'da', 'de', 'ki', 'mi', 'mı', 'mu', 'mü', 'bir', 'bu', 'şu', 'o',
+        'çok', 'ama', 'fakat', 'ancak', 'veya', 'ya', 'hem', 'ise', 'gibi', 'kadar',
+        'sonra', 'önce', 'için', 'diye', 'daha', 'en', 'her', 'hiç', 'yani', 'tüm',
+        'bütün', 'değil', 'var', 'yok', 'bile', 'artık', 'nasıl', 'niye', 'neden',
+    }
+
+    def _filter_noise_values(self, values: list[str]) -> list[str]:
+        """
+        İsim/ilgi alanı/anahtar kelime listelerinden Türkçe bağlaç/edat gibi anlamsız
+        kelimeleri ve çok kısa (<=2 karakter) değerleri eler.
+        """
+        cleaned = []
+        for v in values:
+            v_norm = _normalize_tr(v.strip().lower())
+            if len(v_norm) < 3 or v_norm in self.TURKISH_STOPWORDS:
+                continue
+            cleaned.append(v)
+        return cleaned
 
     @abstractmethod
     def _extract_via_cloud(self, raw_text: str) -> TargetProfile:
@@ -320,7 +352,8 @@ class CloudAIProviderBase(BaseAIProvider):
             f"Sadece ilgili kategori anahtarlarını ({valid_keys}) JSON string listesi olarak ver. "
             f"Hiçbiri yoksa boş liste [] ver.\n\nMetin: \"\"\"{raw_text}\"\"\""
         )
-        data = local_llm_engine.generate_json(system, user, max_tokens=100)
+        # Olgusal sınıflandırma: metinde ne olduğunu tespit ediyoruz, "yaratıcı" olmamalı.
+        data = local_llm_engine.generate_json(system, user, max_tokens=100, temperature=0.1)
         if isinstance(data, list):
             return [str(x).strip() for x in data if str(x).strip() in valid_keys]
         raise ValueError("Yerel model geçerli bir kategori listesi döndürmedi.")
@@ -532,22 +565,50 @@ class CloudAIProviderBase(BaseAIProvider):
             "- dates: 4 haneli yıllar\n"
             "- locations: şehir/plaka\n"
             "- interests: hobi, takım, yiyecek/içecek merakı, kişilik özellikleri (tek kelime/kısa ifade)\n"
-            "- keywords: lakap, özel kelimeler\n\n"
+            "- keywords: lakap, özel kelimeler\n"
+            "ÖNEMLİ KURALLAR:\n"
+            "- SADECE metinde GERÇEKTEN yazan bilgileri çıkar. Metinde olmayan hiçbir tarih/şehir/isim UYDURMA.\n"
+            "- 've', 'ile', 'da', 'de', 'bir', 'bu', 'çok' gibi bağlaç/edat kelimelerini ASLA isim/ilgi alanı/anahtar kelime sayma.\n\n"
             f"Gerçek metin: \"\"\"{raw_text}\"\"\""
         )
-        data = local_llm_engine.generate_json(system, user, max_tokens=600)
+        # Olgusal çıkarım: metinde ne yazdığını aktarıyoruz, "yaratıcı" olursa halüsinasyon riski artar.
+        data = local_llm_engine.generate_json(system, user, max_tokens=600, temperature=0.1)
         if isinstance(data, dict):
             allowed_fields = set(TargetProfile.model_fields.keys())
             clean_data = {k: v for k, v in data.items() if k in allowed_fields}
-            return TargetProfile(**clean_data)
+            profile = TargetProfile(**clean_data)
+            # Küçük yerel model iki türlü hata yapabiliyor: (1) uzun bir kelimenin
+            # ("arkadaştır") bir parçasını ("arka") sanki ayrı/anlamlı bir kelimeymiş gibi
+            # üretmek, (2) metinde HİÇ geçmeyen tarih/şehir gibi bilgi uydurmak (halüsinasyon).
+            # Her alanın metinde gerçekten BAĞIMSIZ bir kelime olarak (kelime sınırıyla)
+            # geçtiğini doğrula, geçmeyenleri ele.
+            profile.names = self._ground_as_whole_words(profile.names, raw_text)
+            profile.dates = self._ground_as_whole_words(profile.dates, raw_text)
+            profile.locations = self._ground_as_whole_words(profile.locations, raw_text)
+            profile.interests = self._ground_as_whole_words(profile.interests, raw_text)
+            profile.keywords = self._ground_as_whole_words(profile.keywords, raw_text)
+            return profile
         raise ValueError("Yerel model geçerli bir profil JSON'u döndürmedi.")
+
+    def _ground_as_whole_words(self, values: list[str], raw_text: str) -> list[str]:
+        """
+        Bir değerin, kaynak metinde başka bir kelimenin parçası değil, BAĞIMSIZ bir kelime
+        olarak geçtiğini doğrular (\\b kelime sınırı ile). Örn. metin "arkadaştır" içerse
+        bile, "arka" değeri bağımsız bir kelime olarak geçmediği için elenir.
+        """
+        normalized_text = _normalize_tr(raw_text.lower())
+        grounded = []
+        for v in values:
+            v_norm = _normalize_tr(v.strip().lower())
+            if v_norm and re.search(r'\b' + re.escape(v_norm) + r'\b', normalized_text):
+                grounded.append(v)
+        return grounded
 
     def _extract_via_fallback(self, raw_text: str) -> TargetProfile:
         """
         API olmadığında veya çöktüğünde regex ve sözlük tabanlı çalışan
         çevrimdışı (offline) deterministik kural motoru.
         """
-        import re
 
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
         names = set()

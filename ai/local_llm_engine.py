@@ -73,10 +73,15 @@ class LocalLLMEngine:
             self._load_failed = True
             return False
 
-    def generate_json(self, system_prompt: str, user_prompt: str, max_tokens: int = 700) -> Any:
+    def generate_json(self, system_prompt: str, user_prompt: str, max_tokens: int = 700, temperature: float = 0.4) -> Any:
         """
         Modelden bir tamamlama alır ve içindeki ilk JSON yapısını (liste veya nesne) döndürür.
         Model JSON etrafına ekstra metin eklerse bile regex ile JSON bloğu çıkarılır.
+
+        temperature: Olgusal/çıkarım görevleri (metinden bilgi çekme) için düşük (örn. 0.1-0.2)
+        verilmeli — yüksek sıcaklık, küçük modelin metinde HİÇ geçmeyen bilgi uydurmasını
+        (halüsinasyon) ve aynı girdiye her seferinde farklı yanıt vermesini kolaylaştırır.
+        Öneri/çağrışım üretimi gibi göreceli olarak "yaratıcı" görevlerde varsayılan kalabilir.
         """
         if not self._ensure_loaded():
             raise RuntimeError("Yerel dil modeli kullanılabilir değil.")
@@ -87,7 +92,7 @@ class LocalLLMEngine:
                 {"role": "user", "content": user_prompt},
             ],
             max_tokens=max_tokens,
-            temperature=0.4,
+            temperature=temperature,
         )
         text = response["choices"][0]["message"]["content"]
 
