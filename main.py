@@ -404,6 +404,7 @@ def handle_default_wordlist_operations() -> None:
 
 from ai.ai_manager import get_active_ai_provider
 from ai.base import BaseAIProvider
+from utils.turkish_data import TR_CITY_PLAKA, TR_PLAKA_CITY, TR_CLUB_FOUNDING_YEARS
 from core.ranking_engine import RankingEngine
 from ai.schemas import TargetProfile, PasswordPolicy
 
@@ -433,12 +434,26 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     print(f"{Fore.LIGHTBLACK_EX}   Örn: İstanbul, 34, Ankara, 06{Style.RESET_ALL}")
     loc_input = input(f"{Fore.GREEN}   > Şehir/Plaka: {Style.RESET_ALL}").strip()
     locations = [l.strip().capitalize() for l in re.split(r'[,/&+\s]+', loc_input) if len(l.strip()) >= 2] if loc_input else []
+    # Şehir/plaka karşılıklı tamamlama: '34' girilirse 'Istanbul' da, 'Istanbul' girilirse
+    # '34' de otomatik eklenir — parola tahmininde ikisi de aynı bilgiyi taşıdığı için.
+    for loc in list(locations):
+        loc_norm = loc.lower()
+        if loc_norm in TR_PLAKA_CITY:
+            locations.append(TR_PLAKA_CITY[loc_norm])
+        elif loc_norm in TR_CITY_PLAKA:
+            locations.append(TR_CITY_PLAKA[loc_norm])
+    locations = sorted(set(locations))
 
     # 4. Takım / Hobiler
     print(f"\n{Fore.CYAN}4. Tuttuğu Takım, Hobiler veya İlgi Alanları:{Style.RESET_ALL}")
     print(f"{Fore.LIGHTBLACK_EX}   Örn: beşiktaş, fenerbahçe, gitar, kedi{Style.RESET_ALL}")
     interest_input = input(f"{Fore.GREEN}   > Takım/Hobiler: {Style.RESET_ALL}").strip()
     interests = [i.strip().lower() for i in re.split(r'[,/&+\s]+', interest_input) if len(i.strip()) >= 2] if interest_input else []
+    # Bilinen bir kulüp girilirse kuruluş yılı da önemli tarihlere eklenir (örn. beşiktaş -> 1903).
+    for interest in interests:
+        if interest in TR_CLUB_FOUNDING_YEARS:
+            dates.append(TR_CLUB_FOUNDING_YEARS[interest])
+    dates = sorted(set(dates))
 
     # 5. Özel Kelimeler / Renk / Lakap
     print(f"\n{Fore.CYAN}5. Özel Kelimeler, Sevdiği Renk veya Lakap:{Style.RESET_ALL}")

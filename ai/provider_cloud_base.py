@@ -14,6 +14,7 @@ from utils.logger import logger
 from ai.base import BaseAIProvider
 from ai.schemas import TargetProfile
 from ai.local_llm_engine import local_llm_engine
+from utils.turkish_data import TR_CITY_PLAKA
 
 _TR_ASCII_MAP = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
 
@@ -141,12 +142,21 @@ class CloudAIProviderBase(BaseAIProvider):
     def has_real_ai(self) -> bool:
         """
         Public: main.py gibi dış çağıranların anahtarın salt VAR OLMASI yerine gerçek
-        kullanılabilirliği sorgulaması için — istemci kurulumu başarısız olduysa veya
-        süreç bu oturumda 'düşmüş' işaretlendiyse burada da yansır.
+        kullanılabilirliği sorgulaması için — istemci kurulumu başarısız olduysa burada
+        da yansır.
+
+        NOT: yerel model için _provider_state["local_llm_down_until"] (geçici soğuma)
+        KASITLI OLARAK burada kontrol EDİLMEZ. Bu bayrak, TEK bir arızi çağrı
+        başarısız olduğunda 60sn'liğine "düşmüş" işaretlenir; eğer burada da
+        kontrol edilseydi, o 60sn boyunca has_real_ai() False dönerdi ve
+        infer_unknown_values/expand_associations gibi metotlar _cascade()'e hiç
+        girmeden erkenden boş liste dönerdi — hâlbuki _cascade() zaten bu durumda
+        (yerel model soğumadayken) güvenli/deterministik sözlük tabanlı fallback'e
+        düşecekti. Sonuç: aynı girdi bazen tahmin üretir bazen üretmezdi (kullanıcı
+        raporu: "köpeği var" dediğinde bazen isim önerisi geliyor bazen gelmiyor).
+        Burada sadece PAKETİN/MODELİN kurulu olup olmadığına bakılır.
         """
-        return self.is_available() or (
-            local_llm_engine.is_available() and time.time() >= _provider_state["local_llm_down_until"]
-        )
+        return self.is_available() or local_llm_engine.is_available()
 
     def extract_target_profile(self, raw_text: str) -> TargetProfile:
         """
@@ -330,13 +340,21 @@ class CloudAIProviderBase(BaseAIProvider):
         return profile
 
     def _detect_unknown_categories(self, raw_text: str) -> list[str]:
-        """Metinde 'var ama değerini bilmiyorum' türünden ifade edilen kategorileri tespit eder."""
-        return self._cascade(
+        """
+        Metinde 'var ama değerini bilmiyorum' türünden ifade edilen kategorileri tespit eder.
+        Basit/açık durumlar (örn. 'köpeği var') HER ZAMAN deterministik sezgisel motorla da
+        ayrıca kontrol edilip AI sonucuyla BİRLEŞTİRİLİR — küçük yerel modelin örnekleme
+        rastgeleliği yüzünden aynı girdide tutarsız sonuç verebilmesine karşı güvenlik ağı
+        (aynı cümle farklı çalıştırmalarda AI tarafından bazen yakalanıp bazen kaçırılabiliyor).
+        """
+        ai_result = self._cascade(
             cloud_fn=lambda: self._detect_unknown_categories_via_cloud(raw_text),
             local_fn=lambda: self._detect_unknown_categories_via_local_llm(raw_text),
-            fallback_fn=lambda: self._detect_unknown_categories_heuristic(raw_text),
+            fallback_fn=lambda: [],
             label="bilinmeyen kategori tespiti"
         )
+        heuristic_result = self._detect_unknown_categories_heuristic(raw_text)
+        return sorted(set(ai_result) | set(heuristic_result))
 
     @abstractmethod
     def _detect_unknown_categories_via_cloud(self, raw_text: str) -> list[str]:
@@ -358,9 +376,6 @@ class CloudAIProviderBase(BaseAIProvider):
             return [str(x).strip() for x in data if str(x).strip() in valid_keys]
         raise ValueError("Yerel model geçerli bir kategori listesi döndürmedi.")
 
-    UNKNOWN_VALUE_CUES = [
-        "bilmiyorum", "bilmiyoruz", "hatırlamıyorum", "hatırlamıyoruz", "hatirlamiyorum"
-    ]
     CATEGORY_EXISTENCE_CUES = {
         "pet": ["köpeği var", "kedisi var", "köpeğim var", "kedim var", "evcil hayvanı var", "evcil hayvan"],
         "child": ["çocuğu var", "oğlu var", "kızı var", "kardeşi var"],
@@ -369,12 +384,16 @@ class CloudAIProviderBase(BaseAIProvider):
     }
 
     def _detect_unknown_categories_heuristic(self, raw_text: str) -> list[str]:
-        lower = raw_text.lower()
-        if not any(cue in lower for cue in self.UNKNOWN_VALUE_CUES):
-            return []
+        """
+        Tamamen deterministik tespit: bir kategorinin VAR OLDUĞU belirtilmişse (örn.
+        'köpeği var') tetiklenir — ayrıca 'bilmiyorum' denmesi ŞART DEĞİLDİR, sadece bir
+        varlık ifadesi yeterlidir. Türkçe karakter farklarına (ö/o, ğ/g gibi) duyarsız
+        karşılaştırma yapılır ki kullanıcı ASCII yazsa da (örn. 'kopegi var') yakalansın.
+        """
+        lower = _normalize_tr(raw_text.lower())
         found = []
         for category, cues in self.CATEGORY_EXISTENCE_CUES.items():
-            if any(cue in lower for cue in cues):
+            if any(_normalize_tr(cue) in lower for cue in cues):
                 found.append(category)
         return found
 
@@ -624,11 +643,7 @@ class CloudAIProviderBase(BaseAIProvider):
             dates.add(d)
 
         # 2. Şehir ve Plaka sözlüğü
-        tr_cities = {
-            'istanbul': '34', 'ankara': '06', 'izmir': '35', 'bursa': '16',
-            'antalya': '07', 'adana': '01', 'trabzon': '61', 'konya': '42',
-            'eskisehir': '26', 'kocaeli': '41', 'gaziantep': '27'
-        }
+        tr_cities = TR_CITY_PLAKA
         raw_lower = raw_text.lower()
         for city, plate in tr_cities.items():
             if city in raw_lower:
