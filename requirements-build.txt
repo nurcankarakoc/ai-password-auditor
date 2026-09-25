@@ -1,0 +1,9 @@
+# Cybzenor - .exe Derleme Gereksinimleri (bkz. build_exe.py)
+# Kurulum: pip install -r requirements.txt -r requirements-build.txt
+pyinstaller>=6.10.0
+
+# setup_local_ai.py normalde bu ikisini ayrıca (isteğe bağlı) kurar; .exe'ye yerel AI
+# desteğinin GÖMÜLÜ gelmesi için derleme makinesinde bunlar da kurulu olmalıdır —
+# aksi halde .exe kullanıcıları yerel AI'yı hiç kuramaz (ayrı bir Python'ları olmaz).
+llama-cpp-python>=0.3.0
+huggingface_hub>=0.20.0

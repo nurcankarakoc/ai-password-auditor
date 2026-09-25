@@ -1,0 +1,70 @@
+name: Windows .exe Derle ve Yayınla
+
+# Bir sürüm etiketi (örn. v1.0.0) push edildiğinde otomatik çalışır; ayrıca Actions
+# sekmesinden elle de tetiklenebilir (workflow_dispatch). Windows .exe'sini derler ve
+# etiketli bir sürüm (tag) ile tetiklendiyse GitHub Releases'e otomatik yükler —
+# böylece kimse elle bir .exe yüklemek zorunda kalmaz, herkes Releases sayfasından
+# indirebilir.
+"on":
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Python kurulumu
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Temel bağımlılıkları kur
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller huggingface_hub
+
+      - name: llama-cpp-python kur (.exe'ye gömülü yerel AI desteği için)
+        shell: pwsh
+        run: |
+          pip install llama-cpp-python
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Standart kurulum başarısız oldu, önceden derlenmiş CPU wheel indeksi deneniyor..."
+            pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          }
+
+      - name: .exe derle
+        shell: pwsh
+        run: python build_exe.py
+
+      - name: Derleme çıktısını doğrula
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/Cybzenor.exe")) {
+            Write-Error "dist/Cybzenor.exe oluşturulmadı!"
+            exit 1
+          }
+          Get-Item "dist/Cybzenor.exe" | Select-Object Name, Length
+
+      - name: Derleme çıktısını iş akışı eki (artifact) olarak sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cybzenor-Windows-exe
+          path: dist/Cybzenor.exe
+          retention-days: 30
+
+      - name: Etiketli sürümse GitHub Release'e yükle
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Cybzenor.exe
+          generate_release_notes: true
