@@ -14,7 +14,7 @@ from utils.logger import logger
 from ai.base import BaseAIProvider
 from ai.schemas import TargetProfile
 from ai.local_llm_engine import local_llm_engine
-from utils.turkish_data import TR_CITY_PLAKA
+from utils.turkish_data import TR_CITY_PLAKA, TR_CLUB_SYMBOLS
 
 _TR_ASCII_MAP = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
 
@@ -414,6 +414,20 @@ class CloudAIProviderBase(BaseAIProvider):
 
     def _generate_roots_via_local_llm(self, profile: TargetProfile) -> list[str]:
         system = "Sen bir siber güvenlik denetim uzmanısın. Sadece istenen JSON liste formatında yanıt ver."
+        # Takım kuralı SADECE profilde gerçekten bir kulüp geçiyorsa prompta eklenir —
+        # aksi halde küçük model, örnek kuraldaki takımı (örn. '1903'/'bjk') profilde
+        # hiç geçmese bile "papağan gibi" tekrarlayabiliyor (bkz. aşağıdaki deterministik
+        # _filter_irrelevant_club_references güvenlik ağı, bu prompt iyileştirmesi de
+        # bunun ihtimalini baştan azaltır).
+        profile_interests_norm = {_normalize_tr(i.lower()) for i in profile.interests}
+        mentioned_club = next((c for c in TR_CLUB_SYMBOLS if c in profile_interests_norm), None)
+        if mentioned_club:
+            club_rule = (
+                f"KURAL: Profildeki takım '{mentioned_club}' ile ilgili SADECE şu sembolleri kullan: "
+                f"{sorted(TR_CLUB_SYMBOLS[mentioned_club])}. Başka hiçbir takımın sembolünü/yılını EKLEME."
+            )
+        else:
+            club_rule = "KURAL: Profilde hiçbir takım/kulüp belirtilmemiş — kesinlikle hiçbir takım sembolü/yılı (1903, bjk, 1907, fener, 1905, gs vb.) EKLEME."
         user = (
             f"Örnek girdi: isim='Ahmet', tarih='2007', takım='besiktas' -> "
             f"Örnek çıktı: [\"ahmet2007\", \"Ahmet1903\", \"ahmet_bjk\", \"Bjk.Ahmet\", \"ahmet07\"]\n\n"
@@ -421,15 +435,35 @@ class CloudAIProviderBase(BaseAIProvider):
             f"konumlar={profile.locations}, ilgi alanları={profile.interests}.\n"
             f"YUKARIDAKİ ÖRNEĞİ KOPYALAMADAN, bu GERÇEK profile özgü, bu kişinin parola koyarken kullanacağı "
             f"EN MANTIKLI 20 adet kök kelime/şablon üret (isim+tarih, isim+takım gibi). "
-            f"KURAL: Beşiktaşlıysa 1907/1905 ekleme, '1903'/'bjk' ekle; Fenerbahçeliyse '1907'/'fener' ekle; "
-            f"Galatasaraylıysa '1905'/'gs' ekle. Sadece JSON dizisi olarak yanıt ver, başka hiçbir şey yazma."
+            f"{club_rule} Sadece JSON dizisi olarak yanıt ver, başka hiçbir şey yazma."
         )
         data = local_llm_engine.generate_json(system, user, max_tokens=900)
         if isinstance(data, list):
             values = [str(x).strip() for x in data if str(x).strip()]
             if values:
-                return values
+                return self._filter_irrelevant_club_references(values, profile)
         raise ValueError("Yerel model geçerli bir kök listesi döndürmedi.")
+
+    def _filter_irrelevant_club_references(self, roots: list[str], profile: TargetProfile) -> list[str]:
+        """
+        Küçük yerel model, prompttaki takım kuralını (Beşiktaşlıysa 1903/bjk ekle gibi)
+        profilde o takım hiç geçmese bile "papağan gibi" köklere sızdırabiliyor. Profilde
+        GEÇMEYEN bir takıma ait sembol (1903/bjk/fener/gs gibi) içeren kökler elenir.
+        Prompt iyileştirmesi bu ihtimali azaltır ama garanti etmez; bu filtre kesin çözümdür.
+        """
+        profile_interests_norm = {_normalize_tr(i.lower()) for i in profile.interests}
+        mentioned_clubs = {club for club in TR_CLUB_SYMBOLS if club in profile_interests_norm}
+        allowed_symbols = {mc for club in mentioned_clubs for mc in TR_CLUB_SYMBOLS[club]}
+        all_symbols = {sym for symbols in TR_CLUB_SYMBOLS.values() for sym in symbols}
+        forbidden_symbols = all_symbols - allowed_symbols
+
+        filtered = []
+        for root in roots:
+            root_norm = _normalize_tr(root.lower())
+            if any(sym in root_norm for sym in forbidden_symbols):
+                continue
+            filtered.append(root)
+        return filtered
 
     CATEGORY_LABELS = {
         "pet": "evcil hayvan (köpek/kedi) ismi",

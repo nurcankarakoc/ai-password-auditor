@@ -21,3 +21,19 @@ TR_CLUB_FOUNDING_YEARS = {
     'trabzonspor': '1967', 'ts': '1967',
     'bursaspor': '1963',
 }
+
+# Kulüp -> onunla ilişkili sembol/kısaltma/yıl kümesi. _generate_roots_via_heuristic'teki
+# team_affinity ile aynı veriden türetilmiştir; ayrıca küçük yerel modelin, prompttaki
+# "Beşiktaşlıysa 1903/bjk ekle" gibi ÖRNEK kuralları profilde o takım hiç geçmese bile
+# köklere sızdırmasına (papağan gibi tekrarlamasına) karşı filtrelemede kullanılır
+# (bkz. ai/provider_cloud_base.py::_filter_irrelevant_club_references).
+TR_CLUB_SYMBOLS = {
+    'besiktas': {'bjk', '1903', 'kartal', 'karakartal'},
+    'bjk': {'besiktas', '1903', 'kartal'},
+    'fenerbahce': {'fb', '1907', 'fener', 'kanarya'},
+    'fener': {'fb', '1907', 'fenerbahce'},
+    'galatasaray': {'gs', '1905', 'cimbom', 'aslan'},
+    'gs': {'galatasaray', '1905', 'aslan'},
+    'trabzonspor': {'ts', '1967', 'trabzon', 'firtina'},
+    'bursaspor': {'bursa', '1963', 'timsah'},
+}
