@@ -37,6 +37,21 @@ def main() -> None:
         print(f"[HATA] Beklenen dosya bulunamadı: {default_wordlist}")
         sys.exit(1)
 
+    # llama-cpp-python kurulu mu? Kurulu değilse .exe'ye gömülemez ama yine de derlenebilir;
+    # kullanıcı Ayarlar sayfasından yerel AI modülcü ayrıca indirip yükleyebilir.
+    try:
+        import llama_cpp  # noqa: F401
+        _has_llama = True
+    except ImportError:
+        _has_llama = False
+        print("[UYARI] llama-cpp-python kurulu değil — .exe, yerel AI gömülü olmadan derleniyor.")
+
+    try:
+        import huggingface_hub  # noqa: F401
+        _has_hf = True
+    except ImportError:
+        _has_hf = False
+
     # Önceki derlemelerden kalan build/ ve dist/ klasörlerini temizle (--clean sadece
     # PyInstaller'ın kendi önbelleğini temizler, dist/'i temizlemez).
     for stale in ("build", "dist"):
@@ -56,9 +71,12 @@ def main() -> None:
         "--add-data", _add_data(default_config, "config"),
         "--collect-all", "customtkinter",
         "--collect-all", "darkdetect",
-        "--collect-all", "llama_cpp",
-        "--collect-all", "huggingface_hub",
     ]
+
+    if _has_llama:
+        args += ["--collect-all", "llama_cpp"]
+    if _has_hf:
+        args += ["--collect-all", "huggingface_hub"]
 
     print("[*] PyInstaller derlemesi başlıyor (birkaç dakika sürebilir)...")
     PyInstaller.__main__.run(args)

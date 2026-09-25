@@ -35,12 +35,17 @@ jobs:
 
       - name: llama-cpp-python kur (.exe'ye gömülü yerel AI desteği için)
         shell: pwsh
+        continue-on-error: true
         run: |
-          pip install llama-cpp-python
+          # Önce önceden derlenmiş CPU wheel'i dene (daha hızlı ve derleme gerektirmez)
+          pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Standart kurulum başarısız oldu, önceden derlenmiş CPU wheel indeksi deneniyor..."
-            pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+            Write-Host "Önceden derlenmiş wheel bulunamadı, standart kurulum deneniyor..."
+            pip install llama-cpp-python
           }
+          # Kurulum başarısız olsa bile build devam eder (continue-on-error: true).
+          # Bu durumda .exe içinde yerel AI modülü OLMAZ; kullanıcı Ayarlar sayfasındaki
+          # 'Yerel AI Modelini Kur' butonu ile modeli ayrıca indirebilir.
 
       - name: .exe derle
         shell: pwsh
