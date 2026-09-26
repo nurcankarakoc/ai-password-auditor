@@ -20,6 +20,13 @@ from pathlib import Path
 
 import PyInstaller.__main__
 
+from utils.platform_helper import setup_terminal_encoding
+
+# Windows'ta konsolun varsayılan kod sayfası (örn. GitHub Actions runner'larında cp1252)
+# Türkçe karakterler (ş, ğ, ı vb.) içeren print() çağrılarında UnicodeEncodeError ile
+# ANINDA çökmeye neden oluyordu — bu betiğin kendi çıktısı için de aynı düzeltme uygulanır.
+setup_terminal_encoding()
+
 BASE_DIR = Path(__file__).resolve().parent
 DIST_NAME = "Cybzenor"
 

@@ -17,6 +17,12 @@ permissions:
 jobs:
   build-windows-exe:
     runs-on: windows-latest
+    env:
+      # GitHub'ın Windows runner'larındaki konsolun varsayılan kod sayfası (cp1252)
+      # Türkçe karakterler (ş, ğ, ı vb.) içeren print()/log çıktılarında anında
+      # UnicodeEncodeError ile çöküyordu — bu, tüm adımlar için Python'u UTF-8 modunda
+      # çalıştırıp sorunu kökten çözer.
+      PYTHONUTF8: "1"
     steps:
       - name: Kodu indir
         uses: actions/checkout@v4
