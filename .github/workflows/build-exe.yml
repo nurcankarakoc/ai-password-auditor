@@ -47,6 +47,11 @@ jobs:
           # Bu durumda .exe içinde yerel AI modülü OLMAZ; kullanıcı Ayarlar sayfasındaki
           # 'Yerel AI Modelini Kur' butonu ile modeli ayrıca indirebilir.
 
+      - name: Yerel AI modelini indir (.exe'ye gömülecek, ~1GB)
+        shell: pwsh
+        continue-on-error: true
+        run: python -c "from ai.local_llm_engine import download_model; download_model()"
+
       - name: .exe derle
         shell: pwsh
         run: python build_exe.py

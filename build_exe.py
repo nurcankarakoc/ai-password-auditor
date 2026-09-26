@@ -38,7 +38,7 @@ def main() -> None:
         sys.exit(1)
 
     # llama-cpp-python kurulu mu? Kurulu değilse .exe'ye gömülemez ama yine de derlenebilir;
-    # kullanıcı Ayarlar sayfasından yerel AI modülcü ayrıca indirip yükleyebilir.
+    # kullanıcı Ayarlar sayfasından yerel AI modelini ayrıca indirip yükleyebilir.
     try:
         import llama_cpp  # noqa: F401
         _has_llama = True
@@ -46,11 +46,21 @@ def main() -> None:
         _has_llama = False
         print("[UYARI] llama-cpp-python kurulu değil — .exe, yerel AI gömülü olmadan derleniyor.")
 
-    try:
-        import huggingface_hub  # noqa: F401
-        _has_hf = True
-    except ImportError:
-        _has_hf = False
+    # Model dosyası (.gguf) diskte var mı? Varsa .exe'nin İÇİNE gömülür — böylece kullanıcı
+    # .exe'yi açar açmaz, hiçbir ek indirme/tıklama yapmadan yapay zeka aktif olur (bkz.
+    # config/settings.py::_ensure_seed_data_when_frozen). Yoksa (henüz 'python setup_local_ai.py'
+    # çalıştırılmamışsa) .exe yine de derlenir, sadece AI ilk açılışta kurulu gelmez.
+    from ai.local_llm_engine import MODELS_DIR, DEFAULT_FILENAME
+    model_path = MODELS_DIR / DEFAULT_FILENAME
+    if model_path.is_file():
+        print(f"[*] Yerel AI modeli bulundu, .exe'ye gömülecek: {model_path.name} "
+              f"({round(model_path.stat().st_size / (1024 * 1024)):,} MB)")
+    else:
+        print(
+            f"[UYARI] {model_path} bulunamadı — .exe'ye yerel AI modeli GÖMÜLMEYECEK "
+            f"(kullanıcı Ayarlar sayfasından sonradan indirebilir). Modeli önceden gömmek "
+            f"için önce 'python setup_local_ai.py' çalıştırıp tekrar derleyin."
+        )
 
     # Önceki derlemelerden kalan build/ ve dist/ klasörlerini temizle (--clean sadece
     # PyInstaller'ın kendi önbelleğini temizler, dist/'i temizlemez).
@@ -71,12 +81,18 @@ def main() -> None:
         "--add-data", _add_data(default_config, "config"),
         "--collect-all", "customtkinter",
         "--collect-all", "darkdetect",
+        # huggingface_hub'ı --collect-all ile eklemiyoruz: onun opsiyonel CLI/inference
+        # eklentileri (gradio/matplotlib benzeri ağır bağımlılıkları tetikleyebiliyor)
+        # gereksiz yere .exe'yi şişiriyor (ve CI'da derlemeyi başarısız kılabiliyor).
+        # local_llm_engine.py sadece hf_hub_download'ı kullanıyor; normal import taraması
+        # bunu zaten yakalar, gerekirse aşağıdaki hidden-import güvenlik ağı yeter.
+        "--hidden-import", "huggingface_hub",
     ]
 
     if _has_llama:
         args += ["--collect-all", "llama_cpp"]
-    if _has_hf:
-        args += ["--collect-all", "huggingface_hub"]
+    if model_path.is_file():
+        args += ["--add-data", _add_data(model_path, "models")]
 
     print("[*] PyInstaller derlemesi başlıyor (birkaç dakika sürebilir)...")
     PyInstaller.__main__.run(args)

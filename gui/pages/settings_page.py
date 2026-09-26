@@ -29,6 +29,14 @@ def _open_in_file_explorer(path: Path) -> None:
         subprocess.Popen(["xdg-open", str(path)])
 
 
+# ── Kurulum adımları ──────────────────────────────────────────────────────────
+_STEPS = [
+    "1  Kütüphane kontrol",
+    "2  Model indiriliyor",
+    "3  Doğrulama",
+]
+
+
 class SettingsPage(BasePage):
     TITLE = "Ayarlar"
     SUBTITLE = "Yapay zeka motoru, üretim limitleri ve depolama konumları."
@@ -49,25 +57,102 @@ class SettingsPage(BasePage):
         body = card.body
         body.grid_columnconfigure(0, weight=1)
 
+        # Durum satırı: pill + buton
         status_row = ctk.CTkFrame(body, fg_color="transparent")
         status_row.grid(row=0, column=0, sticky="ew")
         self.ai_pill = Pill(status_row, "Kontrol ediliyor...", kind="muted")
         self.ai_pill.pack(side="left")
-        self.install_btn = PrimaryButton(status_row, text="⬇ Yerel AI Modelini Kur", width=220, command=self._on_install)
+        self.install_btn = PrimaryButton(
+            status_row, text="⬇  Yerel AI Modelini Kur", width=220, command=self._on_install
+        )
         self.install_btn.pack(side="left", padx=12)
 
-        self.ai_log = LogConsole(body, height=160)
-        self.ai_log.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        # ── Adım göstergesi ──────────────────────────────────────────────────
+        steps_frame = ctk.CTkFrame(body, fg_color="transparent")
+        steps_frame.grid(row=1, column=0, sticky="ew", pady=(14, 0))
+        self._step_labels: list[ctk.CTkLabel] = []
+        for step_text in _STEPS:
+            lbl = ctk.CTkLabel(
+                steps_frame,
+                text=f"○  {step_text}",
+                font=theme.font(12),
+                text_color=theme.TEXT_MUTED,
+                anchor="w",
+            )
+            lbl.pack(side="left", padx=(0, 24))
+            self._step_labels.append(lbl)
+        self._step_frame = steps_frame
+        self._step_frame.grid_remove()  # başta gizli
 
+        # ── Progress bar ─────────────────────────────────────────────────────
+        self._progress_var = ctk.DoubleVar(value=0.0)
+        self._progress_bar = ctk.CTkProgressBar(
+            body, variable=self._progress_var, height=8, corner_radius=4,
+            fg_color=theme.BG_SECONDARY, progress_color=theme.ACCENT,
+        )
+        self._progress_bar.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        self._progress_bar.grid_remove()  # başta gizli
+
+        self._progress_label = ctk.CTkLabel(
+            body, text="", font=theme.font(11), text_color=theme.TEXT_SECONDARY, anchor="w"
+        )
+        self._progress_label.grid(row=3, column=0, sticky="ew")
+        self._progress_label.grid_remove()  # başta gizli
+
+        # ── Log konsolu ───────────────────────────────────────────────────────
+        self.ai_log = LogConsole(body, height=130)
+        self.ai_log.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+
+    # ── Adım / progress yardımcıları ─────────────────────────────────────────
+    def _show_install_ui(self, visible: bool) -> None:
+        if visible:
+            self._step_frame.grid()
+            self._progress_bar.grid()
+            self._progress_label.grid()
+        else:
+            self._step_frame.grid_remove()
+            self._progress_bar.grid_remove()
+            self._progress_label.grid_remove()
+
+    def _set_step(self, step_index: int) -> None:
+        """Aktif adımı vurgula; geçmiştekileri ✓ ile işaretle."""
+        for i, lbl in enumerate(self._step_labels):
+            if i < step_index:
+                lbl.configure(text=f"✓  {_STEPS[i]}", text_color=theme.ACCENT)
+            elif i == step_index:
+                lbl.configure(text=f"●  {_STEPS[i]}", text_color=theme.TEXT_PRIMARY)
+            else:
+                lbl.configure(text=f"○  {_STEPS[i]}", text_color=theme.TEXT_MUTED)
+
+    def _set_progress(self, downloaded: int, total: int) -> None:
+        """İndirme ilerlemesini progress bar ve etikete yansıt (UI thread'inde çağrılmalı)."""
+        if total > 0:
+            ratio = min(downloaded / total, 1.0)
+            self._progress_var.set(ratio)
+            mb_done = downloaded / 1_048_576
+            mb_total = total / 1_048_576
+            self._progress_label.configure(
+                text=f"{mb_done:.0f} MB / {mb_total:.0f} MB  ({ratio * 100:.0f}%)"
+            )
+        else:
+            self._progress_label.configure(text="İndiriliyor...")
+
+    # ── Kurulum akışı ─────────────────────────────────────────────────────────
     def on_show(self) -> None:
         status = backend.ai_engine_status()
         if status["available"]:
-            self.ai_pill.configure(text="🧠 Yerel AI Modeli Aktif ve Yüklü", fg_color=theme.ACCENT_SOFT, text_color=theme.ACCENT)
+            self.ai_pill.configure(
+                text="🧠 Yerel AI Modeli Aktif ve Yüklü",
+                fg_color=theme.ACCENT_SOFT, text_color=theme.ACCENT,
+            )
             self.install_btn.configure(text="✔ Zaten Kurulu", state="disabled")
         else:
-            self.ai_pill.configure(text="⚠ Yerel AI Modeli Kurulu Değil (kural motoru kullanılıyor)", fg_color="#3a2c0f", text_color=theme.WARNING)
+            self.ai_pill.configure(
+                text="⚠ Yerel AI Modeli Kurulu Değil (kural motoru kullanılıyor)",
+                fg_color="#3a2c0f", text_color=theme.WARNING,
+            )
             if not self._install_running:
-                self.install_btn.configure(text="⬇ Yerel AI Modelini Kur", state="normal")
+                self.install_btn.configure(text="⬇  Yerel AI Modelini Kur", state="normal")
         self._render_limits_from_settings()
         self._render_storage_rows()
 
@@ -75,20 +160,21 @@ class SettingsPage(BasePage):
         if self._install_running:
             return
         self._install_running = True
-        self.install_btn.configure(state="disabled", text="⏳ Kuruluyor...")
+        self.install_btn.configure(state="disabled", text="⏳  Kuruluyor...")
         self.ai_log.clear()
-        self.ai_log.log("Model indiriliyor (~1GB, birkaç dakika sürebilir)...", "info")
+        self._progress_var.set(0.0)
+        self._show_install_ui(True)
+        self._set_step(0)
+        self.ai_log.log("Kurulum başlatıldı...", "info")
 
-        # Donmuş bir .exe olarak çalışırken ayrı bir 'python setup_local_ai.py' süreci
-        # başlatılamaz (kullanıcının Python'u bile kurulu olmayabilir) — bu durumda
-        # model indirme fonksiyonu doğrudan (aynı süreç içinde) çağrılır; llama-cpp-python
-        # zaten .exe içine gömülüdür (bkz. build_exe.py), ayrıca pip kurulumu gerekmez.
         is_frozen = getattr(sys, "frozen", False)
 
-        def stream():
+        def stream() -> None:
             if is_frozen:
                 self._install_in_process()
                 return
+
+            # Adım 1: llama-cpp-python kurulumu (setup_local_ai.py üzerinden)
             script = BASE_DIR / "setup_local_ai.py"
             try:
                 proc = subprocess.Popen(
@@ -98,8 +184,17 @@ class SettingsPage(BasePage):
                 )
                 for line in proc.stdout:  # type: ignore[union-attr]
                     line = line.rstrip("\n")
-                    if line:
-                        self.after(0, lambda l=line: self.ai_log.log(l))
+                    if not line:
+                        continue
+                    # Log satırından hangi adımda olduğumuzu tespit et
+                    ll = line.lower()
+                    if "llama-cpp" in ll or "kütüphane" in ll or "pip" in ll:
+                        self.after(0, lambda: self._set_step(0))
+                    elif "indiriliyor" in ll or "downloading" in ll or "model" in ll:
+                        self.after(0, lambda: self._set_step(1))
+                    elif "tamamlandı" in ll or "hazır" in ll or "complete" in ll:
+                        self.after(0, lambda: self._set_step(2))
+                    self.after(0, lambda l=line: self.ai_log.log(l))
                 proc.wait()
                 ok = proc.returncode == 0
             except Exception as e:
@@ -112,21 +207,80 @@ class SettingsPage(BasePage):
 
     def _install_in_process(self) -> None:
         """.exe modunda (ayrı python süreci olmadan) modeli doğrudan aynı süreçte indirir."""
+        # .exe içinde llama-cpp-python zaten gömülü → direkt adım 2'ye geç
+        self.after(0, lambda: self._set_step(1))
+        self.after(0, lambda: self.ai_log.log("Model indiriliyor (~1GB)...", "info"))
+
         try:
-            from ai.local_llm_engine import download_model
-            download_model()
+            from ai.local_llm_engine import MODELS_DIR, DEFAULT_REPO_ID, DEFAULT_FILENAME
+            from huggingface_hub import hf_hub_download
+
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            target = MODELS_DIR / DEFAULT_FILENAME
+
+            if target.is_file():
+                self.after(0, lambda: self.ai_log.log("Model zaten mevcut, indirme atlanıyor.", "info"))
+                self.after(0, lambda: self._progress_var.set(1.0))
+                self.after(0, lambda: self._progress_label.configure(text="Mevcut model kullanılıyor ✓"))
+            else:
+                # huggingface_hub >= 0.20: tqdm_class parametresiyle özel callback destekleniyor
+                _self = self
+
+                class _UIProgress:
+                    """tqdm arayüzünü taklit ederek UI'ya indirme ilerlemesini bildirir."""
+                    def __init__(self, total=None, **_kw):
+                        self.total = total or 0
+                        self.n = 0
+
+                    def update(self, n: int = 1):
+                        self.n += n
+                        _self.after(0, lambda d=self.n, t=self.total: _self._set_progress(d, t))
+
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *_):
+                        pass
+
+                    def close(self):
+                        pass
+
+                try:
+                    hf_hub_download(
+                        repo_id=DEFAULT_REPO_ID,
+                        filename=DEFAULT_FILENAME,
+                        local_dir=str(MODELS_DIR),
+                        tqdm_class=_UIProgress,  # type: ignore[arg-type]
+                    )
+                except TypeError:
+                    # Eski huggingface_hub sürümleri tqdm_class desteklemez → sessiz fallback
+                    hf_hub_download(
+                        repo_id=DEFAULT_REPO_ID,
+                        filename=DEFAULT_FILENAME,
+                        local_dir=str(MODELS_DIR),
+                    )
+
+            # Adım 3: doğrulama
+            self.after(0, lambda: self._set_step(2))
+            self.after(0, lambda: self._progress_var.set(1.0))
+            self.after(0, lambda: self._progress_label.configure(text="İndirme tamamlandı ✓"))
             ok = True
+
         except Exception as e:
             ok = False
             self.after(0, lambda: self.ai_log.log(f"✖ İndirme başarısız: {e}", "error"))
+
         self.after(0, lambda: self._finish_install(ok))
 
     def _finish_install(self, ok: bool) -> None:
         self._install_running = False
         if ok:
-            self.ai_log.log("✔ Kurulum tamamlandı!", "success")
+            self.ai_log.log("✔ Kurulum tamamlandı! Uygulamayı yeniden başlatın.", "success")
+            for i, lbl in enumerate(self._step_labels):
+                lbl.configure(text=f"✓  {_STEPS[i]}", text_color=theme.ACCENT)
         else:
             self.ai_log.log("✖ Kurulum başarısız oldu. Yukarıdaki günlüğü inceleyin.", "error")
+            self._show_install_ui(False)
         self.on_show()
 
     # ------------------------------------------------------------------ Üretim Limitleri

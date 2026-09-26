@@ -99,10 +99,14 @@ CONFIG_FILE_PATH: Path = BASE_DIR / "config" / "config.json"
 def _ensure_seed_data_when_frozen() -> None:
     """
     Donmuş bir .exe ilk kez (kalıcı klasöründe henüz dosyalar yokken) çalıştırıldığında,
-    pakete gömülü varsayılan wordlist/config kopyalarını .exe'nin yanındaki kalıcı
-    klasöre çıkarır. Yalnızca dosya YOKSA kopyalar — kullanıcının sonradan düzenlediği
+    pakete gömülü varsayılan wordlist/config/yerel-AI-modeli kopyalarını .exe'nin yanındaki
+    kalıcı klasöre çıkarır. Yalnızca dosya YOKSA kopyalar — kullanıcının sonradan düzenlediği
     veya sildiği bir dosyanın üzerine asla yazmaz. Herhangi bir hata sessizce yutulur
-    (en kötü ihtimalle varsayılan liste boş/eksik kalır, uygulama yine de açılır).
+    (en kötü ihtimalle varsayılan liste/model boş/eksik kalır, uygulama yine de açılır).
+
+    Yerel AI modeli (~1GB .gguf) build_exe.py tarafından gömüldüyse, bu sayede kullanıcı
+    hiçbir ek indirme/kurulum adımı yapmadan .exe'yi açar açmaz yapay zeka aktif olur —
+    Ayarlar sayfasındaki 'Kur' butonu sadece geliştirici derlemelerinde/güncellemede gerekir.
     """
     if not getattr(sys, "frozen", False):
         return
@@ -111,6 +115,8 @@ def _ensure_seed_data_when_frozen() -> None:
         (bundled_root / "wordlists" / "default.txt", BASE_DIR / "wordlists" / "default.txt"),
         (bundled_root / "config" / "config.json", BASE_DIR / "config" / "config.json"),
     ]
+    for gguf in (bundled_root / "models").glob("*.gguf"):
+        seed_pairs.append((gguf, BASE_DIR / "models" / gguf.name))
     for src, dst in seed_pairs:
         try:
             if src.is_file() and not dst.is_file():
