@@ -7,6 +7,7 @@ devre dışı kalır; çağıran taraf (LocalAIProvider) bu durumda statik kural
 """
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Optional
@@ -145,6 +146,13 @@ def download_model(repo_id: str = DEFAULT_REPO_ID, filename: str = DEFAULT_FILEN
     if target_path.is_file():
         logger.info(f"Model zaten mevcut: {target_path}")
         return target_path
+
+    # huggingface_hub'ın yeni "Xet" depolama protokolü (CDN tabanlı, parçalı indirme)
+    # bazı ağlarda/CI ortamlarında ara sırada başarısız oluyor (bkz. "CAS Client Error"/
+    # "Request middleware error"). Klasik HTTP indirme yöntemi çok daha güvenilir olduğu
+    # için burada AÇIKÇA devre dışı bırakılır — ortam değişkenini elle ayarlamaya gerek
+    # kalmadan her zaman aynı, kararlı davranışı garanti eder.
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
     from huggingface_hub import hf_hub_download
     logger.info(f"Model indiriliyor: {repo_id}/{filename} -> {MODELS_DIR} (boyuta göre birkaç dakika sürebilir)...")
