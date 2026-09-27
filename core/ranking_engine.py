@@ -82,8 +82,20 @@ class RankingEngine:
         has_leet = any(char in candidate for char in ['@', '4', '3', '1', '!', '$', '5', '0'])
 
         # Priority 1: Doğrudan hedef isim + yıl veya ilişki ikilisi
-        if (has_name and has_date) or is_relation:
-            score = 95
+        # Not: ilişki ikilisi + tarih (örn. "AliSevda2021" — eşinin ismi + evlilik
+        # yılı) gerçek kullanıcı davranışında sade isim+tarih'ten (örn. "Ali2021")
+        # BELİRGİN ŞEKİLDE daha olası bir parola kalıbıdır; ikisine aynı skoru
+        # vermek, max_candidates limitiyle kesme sırasında (bkz. build_targeted_
+        # wordlist) sayıca çok daha fazla olan sade isim+tarih varyasyonlarının
+        # ilişki ikililerini listeden tamamen dışarı itmesine yol açıyordu
+        # (doğrulandı: gerçekçi bir test profilinde). Bu yüzden ilişki+tarih en
+        # üst banda (100) ayrılır.
+        if is_relation and has_date:
+            score = 100
+        elif is_relation:
+            score = 96
+        elif has_name and has_date:
+            score = 90
             if candidate.endswith("!"):
                 score += 3
         # Priority 2: İsim + Genel/İnsan Ekleri veya İlgi alanı + Tarih
@@ -135,9 +147,25 @@ class RankingEngine:
         priority_2_count = 0
         priority_3_count = 0
 
+        # ÖNEMLİ: calculate_score() ile hesaplanan öncelik, dosyaya yazmadan önce
+        # UYGULANIR — sadece istatistik için değil. Aksi halde (üretim sırasına göre
+        # kesme) yüksek olasılıklı bir aday (örn. "AliSevda2021" gibi ilişki+yıl
+        # kombinasyonu, skor ~95) sırf Tier 1 içindeki daha düşük öncelikli isim+ek
+        # kombinasyonlarının hacmi yüzünden max_candidates limitine hiç giremeden
+        # üretim sırasında geride kalıp dosyadan tamamen düşebiliyordu (doğrulandı:
+        # gerçekçi bir test profilinde doğru parola ham üretim sırasında 22.848.
+        # sırada çıkıyor, ama dosya varsayılan olarak sadece ilk 10.000 satırı
+        # tutuyordu). Skora göre sıralama, tam bu senaryoyu düzeltir. Aynı skordaki
+        # adaylar arasında orijinal (Tier) sırası, Python'ın kararlı (stable) sort'u
+        # sayesinde korunur.
+        scored_candidates = [
+            (self.calculate_score(candidate), idx, candidate)
+            for idx, candidate in enumerate(self.generate_ranked_candidates())
+        ]
+        scored_candidates.sort(key=lambda item: (-item[0], item[1]))
+
         with open(output_path, "w", encoding="utf-8") as f:
-            for candidate in self.generate_ranked_candidates():
-                score = self.calculate_score(candidate)
+            for score, _idx, candidate in scored_candidates[: settings.wordlist.max_candidates]:
                 if score >= 85:
                     priority_1_count += 1
                 elif score >= 50:
@@ -147,8 +175,6 @@ class RankingEngine:
 
                 f.write(candidate + "\n")
                 written_count += 1
-                if written_count >= settings.wordlist.max_candidates:
-                    break
 
         end_time = datetime.now(timezone.utc)
         duration = round((end_time - start_time).total_seconds(), 4)
@@ -218,8 +244,17 @@ class RankingEngine:
         default_count = 0
 
         with open(output_path, "w", encoding="utf-8") as out:
-            # 1. Aşama: AI Hedefli listeyi yaz
-            for candidate in self.generate_ranked_candidates():
+            # 1. Aşama: AI Hedefli listeyi, skora göre azalan sırayla yaz (bkz.
+            # build_targeted_wordlist'teki aynı düzeltmenin gerekçesi — üretim
+            # sırasına göre kesmek yüksek öncelikli adayları limitten önce
+            # kaybettiriyordu).
+            scored_candidates = [
+                (self.calculate_score(candidate), idx, candidate)
+                for idx, candidate in enumerate(self.generate_ranked_candidates())
+            ]
+            scored_candidates.sort(key=lambda item: (-item[0], item[1]))
+
+            for _score, _idx, candidate in scored_candidates:
                 lookup = candidate if settings.wordlist.case_sensitive_dedup else candidate.lower()
                 if lookup not in seen:
                     seen.add(lookup)

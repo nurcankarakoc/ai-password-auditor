@@ -5,6 +5,7 @@ Skorlama kriterleri, hedefli wordlist üretimi, hibrit birleştirme ve metadata 
 
 from pathlib import Path
 import json
+import re
 import pytest
 
 from ai.schemas import TargetProfile
@@ -52,6 +53,18 @@ class TestRankingEngineScoring:
         score_leet = engine.calculate_score("@l1")
         assert score_leet <= 40
 
+    def test_relation_plus_date_scores_above_plain_name_plus_date(self, target_profile: TargetProfile):
+        """
+        İlişki ikilisi + tarih (örn. eşinin ismi + evlilik yılı: "AliSevda2021"), sade
+        isim + tarih'ten ("Ali2021") KESİNLİKLE daha yüksek skor almalı. Aksi halde,
+        max_candidates limitiyle kesme sırasında (bkz. build_targeted_wordlist) sayıca
+        çok daha fazla olan sade isim+tarih varyasyonları, çok daha isabetli olan
+        ilişki+tarih adaylarını dosyadan tamamen dışarı itebiliyordu (gerçek regresyon,
+        bkz. test_build_targeted_wordlist_does_not_drop_high_value_relation_candidate).
+        """
+        engine = RankingEngine(target_profile)
+        assert engine.calculate_score("AliSevda2021") > engine.calculate_score("Ali2021")
+
 
 class TestRankingEngineFileGeneration:
     """Hedefli ve hibrit wordlist dosya üretim testleri."""
@@ -74,6 +87,48 @@ class TestRankingEngineFileGeneration:
         assert meta_json["type"] == "AI_TARGETED"
         assert meta_json["total_candidates"] > 0
         assert "priority_distribution" in meta_json
+
+    def test_build_targeted_wordlist_does_not_drop_high_value_relation_candidate(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """
+        Regresyon testi: max_candidates limiti düşükken bile ilişki+tarih gibi yüksek
+        değerli bir aday (örn. "AliSevda2021" — eşinin ismi + evlilik yılı) dosyaya
+        yazılmalı. Önceden dosya, skora bakılmaksızın SADECE üretim sırasına göre
+        kesiliyordu; isim+tarih varyasyonlarının hacmi (çok sayıda tarih/konum/anahtar
+        kelime ile kasıtlı olarak burada büyütülmüştür) ilişki ikilisi adaylarını
+        limitten önce tamamen dışarı itip dosyadan düşürebiliyordu.
+        """
+        monkeypatch.setattr("core.ranking_engine.BASE_DIR", tmp_path)
+        from config.settings import settings
+        monkeypatch.setattr(settings.wordlist, "max_candidates", 40)
+
+        noisy_profile = TargetProfile(
+            names=["Ali", "Sevda"],
+            dates=["2021"],
+            # Tier 1'in "isim + konum/anahtar kelime" hacmini kasıtlı şişirir — tek
+            # başına ilişki+tarih ile aynı skoru (95) alan ama çok daha az isabetli
+            # onlarca isim+konum kombinasyonu üretir.
+            locations=[f"sehir{i}" for i in range(30)],
+            interests=["fenerbahce"],
+            relations=[["Ali", "Sevda"]],
+            keywords=["developer"],
+        )
+        engine = RankingEngine(noisy_profile)
+        output_file, _meta = engine.build_targeted_wordlist(output_filename="test_no_drop.txt")
+
+        with open(output_file, "r", encoding="utf-8") as f:
+            raw_lines = [l.strip() for l in f if l.strip()]
+
+        # Ayraç/büyük-küçük harf farklarından bağımsız karşılaştırma için sadece
+        # alfanumerik karakterleri korunarak sadeleştirilir (örn. "Ali_Sevda_2021!"
+        # -> "alisevda2021").
+        canon_lines = {re.sub(r"[^a-z0-9]", "", l.lower()) for l in raw_lines}
+
+        assert any(c in ("alisevda2021", "sevdaali2021") for c in canon_lines), (
+            "Yüksek değerli ilişki+tarih adayı (AliSevda2021 / SevdaAli2021), düşük "
+            "max_candidates limitinde dosyadan düşürülmemeli."
+        )
 
     def test_build_hybrid_wordlist_combines_and_deduplicates(self, target_profile: TargetProfile, tmp_path: Path, monkeypatch):
         """build_hybrid_wordlist hedefli liste ile varsayılan listeyi tekilleştirerek birleştiriyor mu?"""
