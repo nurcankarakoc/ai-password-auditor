@@ -93,20 +93,21 @@ jobs:
           }
           Get-Item "installer\output\CybzenorKurulum.exe" | Select-Object Name, Length
 
-      - name: Derleme çıktılarını iş akışı eki (artifact) olarak sakla
+      - name: Derleme çıktısını iş akışı eki (artifact) olarak sakla
         uses: actions/upload-artifact@v4
         with:
+          # Not: dist/Cybzenor.exe (taşınabilir/portable sürüm) BİLİNÇLİ OLARAK
+          # yayınlanmıyor — installer/cybzenor.iss'nin içine gömülü olarak zaten
+          # geliyor. İki ayrı .exe (kurulum dosyası + taşınabilir) kullanıcıyı
+          # "hangisini indirmeliyim?" diye kafası karıştırıyordu; tek, net bir
+          # indirme seçeneği (CybzenorKurulum.exe) bırakıldı.
           name: Cybzenor-Windows
-          path: |
-            dist/Cybzenor.exe
-            installer/output/CybzenorKurulum.exe
+          path: installer/output/CybzenorKurulum.exe
           retention-days: 30
 
       - name: Etiketli sürümse GitHub Release'e yükle
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/Cybzenor.exe
-            installer/output/CybzenorKurulum.exe
+          files: installer/output/CybzenorKurulum.exe
           generate_release_notes: true
