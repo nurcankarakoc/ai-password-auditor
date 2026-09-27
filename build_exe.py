@@ -30,6 +30,25 @@ setup_terminal_encoding()
 BASE_DIR = Path(__file__).resolve().parent
 DIST_NAME = "Cybzenor"
 
+# PyInstaller, .exe'yi derleme sırasında birden fazla kez açıp yazıyor (PE checksum
+# güncellemesi dahil). Proje klasörü OneDrive gibi eşzamanlı senkronize edilen bir
+# yerdeyse (bu projede olduğu gibi), OneDrive'ın arka planda dosyayı taraması/senkronize
+# etmeye çalışması "PermissionError: [Errno 13] Permission denied" ile derlemeyi
+# başarısız kılabiliyor. Bunu önlemek için asıl derleme OneDrive DIŞINDAKİ geçici bir
+# klasörde yapılır; tamamlanan .exe en sonunda tek seferlik bir kopyalama ile projenin
+# kendi dist/ klasörüne taşınır (GitHub Actions gibi OneDrive olmayan ortamlarda bu
+# geçici klasör zaten proje klasörüyle aynı diskte, davranış değişmez).
+_scratch_override = os.environ.get("CYBZENOR_BUILD_SCRATCH", "").strip()
+# Not: `Path("") or X` HER ZAMAN Path("") döner (pathlib nesneleri __bool__ tanımlamaz,
+# yani boş string bile "truthy"dir) — bu yüzden boşluk kontrolü açıkça yapılır.
+_WORK_ROOT = (
+    Path(_scratch_override) if _scratch_override
+    else Path(os.environ.get("TEMP", str(BASE_DIR))) / "cybzenor_build"
+)
+BUILD_DIST_DIR = _WORK_ROOT / "dist"
+BUILD_WORK_DIR = _WORK_ROOT / "build"
+FINAL_DIST_DIR = BASE_DIR / "dist"
+
 
 def _add_data(src: Path, dest_subdir: str) -> str:
     """PyInstaller --add-data argümanını platforma uygun ayraçla (Windows: ';', diğer: ':') üretir."""
@@ -71,8 +90,7 @@ def main() -> None:
 
     # Önceki derlemelerden kalan build/ ve dist/ klasörlerini temizle (--clean sadece
     # PyInstaller'ın kendi önbelleğini temizler, dist/'i temizlemez).
-    for stale in ("build", "dist"):
-        stale_path = BASE_DIR / stale
+    for stale_path in (BUILD_DIST_DIR, BUILD_WORK_DIR, FINAL_DIST_DIR):
         if stale_path.is_dir():
             shutil.rmtree(stale_path, ignore_errors=True)
 
@@ -83,6 +101,8 @@ def main() -> None:
         "--windowed",
         "--noconfirm",
         "--clean",
+        "--distpath", str(BUILD_DIST_DIR),
+        "--workpath", str(BUILD_WORK_DIR),
         "--paths", str(BASE_DIR),
         "--add-data", _add_data(default_wordlist, "wordlists"),
         "--add-data", _add_data(default_config, "config"),
@@ -104,13 +124,19 @@ def main() -> None:
     print("[*] PyInstaller derlemesi başlıyor (birkaç dakika sürebilir)...")
     PyInstaller.__main__.run(args)
 
-    exe_path = BASE_DIR / "dist" / f"{DIST_NAME}.exe"
-    if exe_path.is_file():
-        size_mb = round(exe_path.stat().st_size / (1024 * 1024), 1)
-        print(f"\n[+] Derleme tamamlandı: {exe_path} ({size_mb} MB)")
-    else:
+    built_exe_path = BUILD_DIST_DIR / f"{DIST_NAME}.exe"
+    if not built_exe_path.is_file():
         print("\n[HATA] .exe dosyası oluşturulamadı, yukarıdaki PyInstaller çıktısını inceleyin.")
         sys.exit(1)
+
+    # Tamamlanan .exe'yi projenin kendi dist/ klasörüne taşı (bkz. yukarıdaki OneDrive notu).
+    FINAL_DIST_DIR.mkdir(parents=True, exist_ok=True)
+    exe_path = FINAL_DIST_DIR / f"{DIST_NAME}.exe"
+    if built_exe_path.resolve() != exe_path.resolve():
+        shutil.copy2(built_exe_path, exe_path)
+
+    size_mb = round(exe_path.stat().st_size / (1024 * 1024), 1)
+    print(f"\n[+] Derleme tamamlandı: {exe_path} ({size_mb} MB)")
 
 
 if __name__ == "__main__":

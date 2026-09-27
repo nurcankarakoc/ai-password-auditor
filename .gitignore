@@ -34,6 +34,10 @@ build/
 dist/
 *.spec
 
+# Kurulum dosyası (installer/cybzenor.iss) çıktısı — GitHub Releases'e otomatik
+# yüklenir, repoya commit edilmez.
+installer/output/
+
 # IDE / OS
 .vscode/
 .idea/
