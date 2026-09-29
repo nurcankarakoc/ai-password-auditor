@@ -94,6 +94,8 @@ def main() -> None:
         if stale_path.is_dir():
             shutil.rmtree(stale_path, ignore_errors=True)
 
+    app_icon = BASE_DIR / "assets" / "icon.ico"
+
     args = [
         str(BASE_DIR / "launch_gui.py"),
         "--name", DIST_NAME,
@@ -120,6 +122,15 @@ def main() -> None:
         args += ["--collect-all", "llama_cpp"]
     if model_path.is_file():
         args += ["--add-data", _add_data(model_path, "models")]
+
+    if app_icon.is_file():
+        # --icon: .exe'nin kendi simgesi (Gezgin/görev çubuğu). --add-data: aynı dosya,
+        # pencere/taskbar ikonu çalışma zamanında ayarlanabilsin diye .exe'nin İÇİNE de
+        # gömülür (bkz. gui/app.py::_resolve_icon_path) — --icon SADECE .exe dosyasının
+        # kendi simgesini ayarlar, çalışan pencerenin ikonunu DEĞİŞTİRMEZ.
+        args += ["--icon", str(app_icon), "--add-data", _add_data(app_icon, "assets")]
+    else:
+        print(f"[UYARI] {app_icon} bulunamadı — .exe varsayılan PyInstaller simgesiyle derlenecek.")
 
     print("[*] PyInstaller derlemesi başlıyor (birkaç dakika sürebilir)...")
     PyInstaller.__main__.run(args)

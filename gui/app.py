@@ -26,6 +26,21 @@ from gui.pages.audit import AuditPage  # noqa: E402
 from gui.pages.online import OnlinePage  # noqa: E402
 from gui.pages.settings_page import SettingsPage  # noqa: E402
 
+def _resolve_icon_path() -> str:
+    """
+    Pencere/taskbar ikonunun (.ico) yolunu döndürür. .exe'ye gömülü (frozen) modda
+    dosya sys._MEIPASS altındaki çıkarılmış geçici klasörde bulunur (bkz. build_exe.py
+    --add-data), normal Python çalıştırmasında ise doğrudan proje kökünde. Dosya
+    bulunamazsa boş string döner — bu durumda çağıran taraf ikon ayarlamayı atlar,
+    hiçbir zaman hata fırlatmaz (ikon eksikliği uygulamanın çalışmasını engellememeli).
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidate = Path(sys._MEIPASS) / "assets" / "icon.ico"
+    else:
+        candidate = BASE_DIR / "assets" / "icon.ico"
+    return str(candidate) if candidate.is_file() else ""
+
+
 NAV_ITEMS = [
     ("dashboard", "🎯", "Hedefler & Genel Bakış"),
     ("generate", "🧠", "AI Hedefli Liste Üretimi"),
@@ -46,7 +61,9 @@ class CybzenorApp(ctk.CTk):
         self.configure(fg_color=theme.BG_PRIMARY)
 
         try:
-            self.iconbitmap(default="")
+            icon_path = _resolve_icon_path()
+            if icon_path:
+                self.iconbitmap(icon_path)
         except Exception:
             pass
 

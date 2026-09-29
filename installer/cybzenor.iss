@@ -45,6 +45,9 @@ WizardStyle=modern
 ; kurulum dosyasını gereksiz büyütmesin diye orta seviye sıkıştırma yeterli.
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; Kurulum sihirbazının kendi simgesi (görev çubuğu/başlık) — uygulamanın kendi
+; markasıyla tutarlı olsun diye Cybzenor.exe ile aynı .ico kullanılır.
+SetupIconFile=..\assets\icon.ico
 
 [Languages]
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
