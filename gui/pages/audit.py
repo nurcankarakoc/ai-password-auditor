@@ -31,15 +31,30 @@ class AuditPage(BasePage):
         body = card.body
         body.grid_columnconfigure(0, weight=1)
 
+        ctk.CTkLabel(
+            body, text="Kayıtlı Hedef Profili", font=theme.font(12, "bold"),
+            text_color=theme.TEXT_SECONDARY, anchor="w"
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        # readonly: bu kutu sadece Hedef Profilleri sayfasında kayıtlı hedefleri
+        # SEÇMEK içindir, serbest metin girişi için değil — yazılabilir bırakmak,
+        # kullanıcının buraya mı yoksa aşağıdaki "Manuel" kutusuna mı yazması
+        # gerektiği konusunda kafa karışıklığına yol açıyordu.
         self.target_combo = ctk.CTkComboBox(
             body, values=["(Kayıtlı hedef yok)"], font=theme.font(13), dropdown_font=theme.font(13),
             fg_color=theme.BG_SECONDARY, border_color=theme.BORDER, button_color=theme.ACCENT,
-            button_hover_color=theme.ACCENT_HOVER, command=self._on_target_select
+            button_hover_color=theme.ACCENT_HOVER, command=self._on_target_select, state="readonly"
         )
-        self.target_combo.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self.target_combo.grid(row=1, column=0, sticky="ew", pady=(0, 3))
+        ctk.CTkLabel(
+            body, text="Hedef Profilleri sayfasından eklediğiniz kayıtlı hedefler burada listelenir.",
+            font=theme.font(10), text_color=theme.TEXT_MUTED, anchor="w"
+        ).grid(row=2, column=0, sticky="ew", pady=(0, 14))
 
-        self.e_manual = LabeledEntry(body, "veya Manuel SHA-256 Hash / Açık Parola Gir", "Örn: Pamuk2021! veya 64 haneli hash")
-        self.e_manual.grid(row=1, column=0, sticky="ew")
+        self.e_manual = LabeledEntry(
+            body, "veya Manuel SHA-256 Hash / Açık Parola Gir", "Örn: Pamuk2021! veya 64 haneli hash",
+            help_text="Bu kutuyu doldurursanız yukarıdaki kayıtlı hedef seçimi yok sayılır."
+        )
+        self.e_manual.grid(row=3, column=0, sticky="ew")
 
     def _on_target_select(self, choice: str) -> None:
         idx = self.target_combo.cget("values").index(choice) if choice in self.target_combo.cget("values") else -1
@@ -78,7 +93,7 @@ class AuditPage(BasePage):
         self.wordlist_combo = ctk.CTkComboBox(
             body, values=["(Wordlist yok)"], font=theme.font(13), dropdown_font=theme.font(13),
             fg_color=theme.BG_SECONDARY, border_color=theme.BORDER, button_color=theme.ACCENT,
-            button_hover_color=theme.ACCENT_HOVER,
+            button_hover_color=theme.ACCENT_HOVER, state="readonly",
         )
         self.wordlist_combo.grid(row=0, column=0, sticky="ew")
         self._wordlist_paths: list = []

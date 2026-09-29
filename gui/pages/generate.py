@@ -34,18 +34,26 @@ class GeneratePage(BasePage):
         body = card.body
         body.grid_columnconfigure((0, 1), weight=1, uniform="col")
 
-        self.e_names = LabeledEntry(body, "İsimler", "Örn: Ahmet, Ayşe, Pamuk")
+        self.e_names = LabeledEntry(body, "İsimler / Lakaplar", "Örn: Ahmet, Ayşe, Pamuk")
         self.e_names.grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=6)
+        # Soyad, isimlerden AYRI bir alan: Türk kullanıcılarda "Ad+Soyad+Yıl" (örn.
+        # AhmetYılmaz2021) son derece yaygın bir parola kalıbıdır. Önceden soyadın da
+        # genel "İsimler" kutusuna yazılması bekleniyordu ama bu hiç belirtilmediği
+        # için kullanıcılar soyadı çoğu zaman hiç girmiyor, dolayısıyla üretilen
+        # listede bu güçlü kalıp hiç oluşmuyordu. _on_generate() bu alanı isimler
+        # listesine ekleyip motorun mevcut ilişki/kombinasyon mantığına devrediyor.
+        self.e_surname = LabeledEntry(body, "Soyad", "Örn: Yılmaz")
+        self.e_surname.grid(row=0, column=1, sticky="ew", pady=6)
+
         self.e_dates = LabeledEntry(body, "Tarihler (Yıl)", "Örn: 1995, 2021")
-        self.e_dates.grid(row=0, column=1, sticky="ew", pady=6)
-
+        self.e_dates.grid(row=1, column=0, sticky="ew", padx=(0, 10), pady=6)
         self.e_locations = LabeledEntry(body, "Şehir / Plaka", "Örn: İstanbul, 34")
-        self.e_locations.grid(row=1, column=0, sticky="ew", padx=(0, 10), pady=6)
-        self.e_interests = LabeledEntry(body, "İlgi Alanları / Takım", "Örn: Fenerbahçe, gitar, kahve")
-        self.e_interests.grid(row=1, column=1, sticky="ew", pady=6)
+        self.e_locations.grid(row=1, column=1, sticky="ew", pady=6)
 
+        self.e_interests = LabeledEntry(body, "İlgi Alanları / Takım", "Örn: Fenerbahçe, gitar, kahve")
+        self.e_interests.grid(row=2, column=0, sticky="ew", padx=(0, 10), pady=6)
         self.e_keywords = LabeledEntry(body, "Özel Kelimeler / Renk / Lakap", "Örn: mor, yazılımcı, kartal")
-        self.e_keywords.grid(row=2, column=0, columnspan=2, sticky="ew", pady=6)
+        self.e_keywords.grid(row=2, column=1, sticky="ew", pady=6)
 
     # ------------------------------------------------------------------ Serbest metin
     def _build_notes_card(self) -> None:
@@ -169,6 +177,11 @@ class GeneratePage(BasePage):
 
     def _on_generate(self) -> None:
         names = split_csv(self.e_names.get())
+        surnames = split_csv(self.e_surname.get())
+        # Soyad(lar), motorun mevcut isim-kombinasyon ve ilişki-skorlama mantığından
+        # (bkz. core/candidate_generator.py, core/ranking_engine.py) doğrudan
+        # yararlanması için isim listesine eklenir — ayrı bir alan gerekmez.
+        names = names + [s for s in surnames if s not in names]
         dates = split_csv(self.e_dates.get())
         locations = split_csv(self.e_locations.get())
         interests = split_csv(self.e_interests.get())
@@ -182,7 +195,7 @@ class GeneratePage(BasePage):
         if policy is None:
             return
         if not any([names, dates, locations, interests, keywords, free_text]):
-            messagebox.showwarning("Boş Profil", "Lütfen en az bir alan doldurun (isim, tarih, ilgi alanı vb.).")
+            messagebox.showwarning("Boş Profil", "Lütfen en az bir alan doldurun (isim, soyad, tarih, ilgi alanı vb.).")
             return
 
         self.log.clear()
