@@ -6,8 +6,9 @@ Cybzenor GUI - Wordlist Görüntüleyici
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -46,9 +47,15 @@ class WordlistViewerWindow(ctk.CTkToplevel):
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 6))
-        ctk.CTkLabel(header, text=self.path.name, font=theme.font(17, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w")
-        self.stats_label = ctk.CTkLabel(header, text="Yükleniyor...", font=theme.font(11), text_color=theme.TEXT_MUTED)
+        header.grid_columnconfigure(0, weight=1)
+        title_col = ctk.CTkFrame(header, fg_color="transparent")
+        title_col.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(title_col, text=self.path.name, font=theme.font(17, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w")
+        self.stats_label = ctk.CTkLabel(title_col, text="Yükleniyor...", font=theme.font(11), text_color=theme.TEXT_MUTED)
         self.stats_label.pack(anchor="w", pady=(2, 0))
+        SecondaryButton(
+            header, text="💾 Farklı Kaydet (.txt)", width=180, command=self._on_save_as,
+        ).grid(row=0, column=1, sticky="e")
 
         search_row = ctk.CTkFrame(self, fg_color="transparent")
         search_row.grid(row=1, column=0, sticky="ew", padx=20, pady=(6, 6))
@@ -163,6 +170,26 @@ class WordlistViewerWindow(ctk.CTkToplevel):
             return wordlist_manager.get_range(self.path, start=1, end=None)
 
         self._task.run(work, lambda lines: self._render(lines, "Tüm liste gösteriliyor"))
+
+    def _on_save_as(self) -> None:
+        """Wordlist dosyasını kullanıcının seçtiği herhangi bir konuma (Masaüstü,
+        Belgeler vb.) .txt olarak kopyalar — dosya sadece uygulamanın kendi wordlists/
+        generated klasöründe kilitli kalmasın diye."""
+        dest = filedialog.asksaveasfilename(
+            parent=self,
+            title="Wordlist'i Farklı Kaydet",
+            initialfile=self.path.name,
+            defaultextension=".txt",
+            filetypes=[("Metin dosyası", "*.txt"), ("Tüm dosyalar", "*.*")],
+        )
+        if not dest:
+            return
+        try:
+            shutil.copy2(self.path, dest)
+        except OSError as e:
+            messagebox.showerror("Kaydetme Hatası", f"Dosya kaydedilemedi: {e}")
+            return
+        messagebox.showinfo("Kaydedildi", f"Wordlist şu konuma kaydedildi:\n{dest}")
 
     def _on_search(self) -> None:
         query = self.search_entry.get()

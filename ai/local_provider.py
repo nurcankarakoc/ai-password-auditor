@@ -120,14 +120,31 @@ class LocalAIProvider(BaseAIProvider):
         profile = self.enrich_with_interest_associations(profile)
         return profile
 
-    # Türkçe bağlaç/edat/zamir gibi, tek başına hiçbir kişiye özel anlam taşımayan ve
-    # parola tahmininde sadece gürültü üreten kelimeler. AI çıkarımı bunları yanlışlıkla
-    # isim/ilgi alanı/anahtar kelime sanabiliyor (örn. "Ahmet VE Mehmet" cümlesinde 've'yi).
+    # Türkçe bağlaç/edat/zamir/yardımcı fiil gibi, tek başına hiçbir kişiye özel anlam
+    # taşımayan ve parola tahmininde sadece gürültü üreten kelimeler. AI çıkarımı bunları
+    # yanlışlıkla isim/ilgi alanı/anahtar kelime sanabiliyor (örn. "kedisi VARDIR" cümlesinde
+    # 'vardır'ı, "AYRICA köpeği de var" cümlesinde 'ayrıca'yı) — kullanıcı bildirdi: serbest
+    # metne yazdığı "ayrıca", "vardır" gibi kelimeler üretilen wordlist'te (örn.
+    # "SevdaAyrıca2021" gibi) anlamsız aday olarak çıkıyordu.
+    #
+    # ÖNEMLİ: bu küme, karşılaştırıldığı _filter_noise_values() içindeki v_norm gibi,
+    # BAŞTAN ASCII'ye çevrilmiş (Türkçe karaktersiz) halde tutulur — örn. 'için' değil
+    # 'icin', 'değil' değil 'degil'. Önceki halinde küme Türkçe karakterli yazılmıştı
+    # (örn. 'için', 'değil', 'çok', 'hiç', 'tüm'...) ve _normalize_tr() SADECE girdiye
+    # uygulandığı için bu kelimeler ASLA eşleşmiyordu (örn. normalize edilmiş "icin",
+    # normalize EDİLMEMİŞ "için"e hiç eşit olamaz) — bu, listenin yaklaşık yarısını
+    # sessizce işlevsiz bırakan ayrı bir hata idi, burada da düzeltildi.
     TURKISH_STOPWORDS = {
-        've', 'ile', 'da', 'de', 'ki', 'mi', 'mı', 'mu', 'mü', 'bir', 'bu', 'şu', 'o',
-        'çok', 'ama', 'fakat', 'ancak', 'veya', 'ya', 'hem', 'ise', 'gibi', 'kadar',
-        'sonra', 'önce', 'için', 'diye', 'daha', 'en', 'her', 'hiç', 'yani', 'tüm',
-        'bütün', 'değil', 'var', 'yok', 'bile', 'artık', 'nasıl', 'niye', 'neden',
+        've', 'ile', 'da', 'de', 'ki', 'mi', 'mu', 'bir', 'bu', 'su', 'o',
+        'cok', 'ama', 'fakat', 'ancak', 'veya', 'ya', 'hem', 'ise', 'gibi', 'kadar',
+        'sonra', 'once', 'icin', 'diye', 'daha', 'en', 'her', 'hic', 'yani', 'tum',
+        'butun', 'degil', 'var', 'yok', 'bile', 'artik', 'nasil', 'niye', 'neden',
+        'ayrica', 'vardir', 'yoktur', 'dahi', 'uzere', 'gore', 'dogru', 'karsi',
+        'ragmen', 'dolayi', 'itibaren', 'beri', 'hakkinda', 'uzerine', 'birlikte',
+        'beraber', 'olan', 'oldugu', 'oldugunu', 'oldu', 'olur', 'eder',
+        'ben', 'sen', 'biz', 'siz', 'onlar', 'benim', 'senin', 'onun', 'bizim', 'sizin',
+        'kendi', 'kendisi', 'sey', 'boyle', 'oyle', 'soyle', 'bazi', 'bazen', 'belki',
+        'mutlaka', 'tabii', 'tabi', 'zaten', 'yine', 'tekrar', 'lakin',
     }
 
     def _filter_noise_values(self, values: list[str]) -> list[str]:
@@ -619,7 +636,8 @@ class LocalAIProvider(BaseAIProvider):
             "- keywords: lakap, özel kelimeler\n"
             "ÖNEMLİ KURALLAR:\n"
             "- SADECE metinde GERÇEKTEN yazan bilgileri çıkar. Metinde olmayan hiçbir tarih/şehir/isim UYDURMA.\n"
-            "- 've', 'ile', 'da', 'de', 'bir', 'bu', 'çok' gibi bağlaç/edat kelimelerini ASLA isim/ilgi alanı/anahtar kelime sayma.\n\n"
+            "- 've', 'ile', 'da', 'de', 'bir', 'bu', 'çok', 'ayrıca', 'vardır', 'gibi', 'için' gibi bağlaç/edat/yardımcı "
+            "fiil kelimelerini ASLA isim/ilgi alanı/anahtar kelime sayma.\n\n"
             f"Gerçek metin: \"\"\"{raw_text}\"\"\""
         )
         # Olgusal çıkarım: metinde ne yazdığını aktarıyoruz, "yaratıcı" olursa halüsinasyon riski artar.
