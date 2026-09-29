@@ -472,9 +472,9 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     print(f"Metni yazdıktan sonra ENTER tuşuna basınız (yazmak istemiyorsanız doğrudan ENTER ile geçiniz):{Style.RESET_ALL}")
     free_text = input(f"{Fore.GREEN}   > Ek Notlar / Metin: {Style.RESET_ALL}").strip()
 
+    provider = get_active_ai_provider()
     association_words: List[str] = []
     if free_text:
-        provider = get_active_ai_provider()
         print_info("Ek metin doğal dil motoruyla çözümleniyor...")
         parsed_extra = provider.extract_target_profile(free_text)
 
@@ -500,6 +500,12 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
         keywords=keywords,
         association_words=association_words
     )
+    # İlgi alanı -> somut çağrışım kelimesi genişletmesi (örn. "kahve" -> Latte, Americano;
+    # "anime" -> en bilindik anime karakterleri) burada, serbest metin girilmese BİLE her
+    # zaman çalıştırılır. Önceden bu SADECE free_text girilirse (extract_target_profile
+    # üzerinden) tetikleniyordu; kullanıcı ilgi alanını 4. adımda doğrudan girdiğinde
+    # (en yaygın kullanım şekli) AI'nın en belirgin "akıllı" özelliği hiç devreye girmiyordu.
+    profile = provider.enrich_with_interest_associations(profile)
 
     if profile.is_empty():
         return None

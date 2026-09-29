@@ -146,10 +146,17 @@ def build_profile_from_form(
     relations: List[List[str]] = []
     if len(names) >= 2:
         relations.append([names[0], names[1]])
-    return TargetProfile(
+    profile = TargetProfile(
         names=names, dates=dates, locations=locations,
         interests=interests, relations=relations, keywords=keywords,
     )
+    # İlgi alanı -> somut çağrışım kelimesi genişletmesi (örn. "kahve" -> Latte, Americano;
+    # "anime" -> en bilindik anime karakterleri) BURADA, serbest metin kutusu boş bırakılsa
+    # bile her zaman çalıştırılır. Önceden bu SADECE serbest metin girilirse (extract_target_
+    # profile üzerinden) tetikleniyordu; kullanıcı ilgi alanını doğrudan yapılandırılmış
+    # forma yazdığında (en yaygın kullanım şekli) AI'nın en belirgin "akıllı" özelliği hiç
+    # devreye girmiyordu.
+    return get_active_ai_provider().enrich_with_interest_associations(profile)
 
 
 def enrich_profile_with_free_text(profile: TargetProfile, free_text: str) -> TargetProfile:
@@ -166,10 +173,16 @@ def enrich_profile_with_free_text(profile: TargetProfile, free_text: str) -> Tar
     keywords = sorted(set(profile.keywords) | set(parsed.keywords))
     relations = profile.relations or ([[names[0], names[1]]] if len(names) >= 2 else [])
 
-    return TargetProfile(
+    merged = TargetProfile(
         names=names, dates=dates, locations=locations, interests=interests,
-        relations=relations, keywords=keywords, association_words=parsed.association_words,
+        relations=relations, keywords=keywords,
+        association_words=sorted(set(profile.association_words) | set(parsed.association_words)),
     )
+    # BİRLEŞTİRİLMİŞ ilgi alanları üzerinden yeniden çalıştırılır: profile.association_words
+    # (yukarıda) sadece yapılandırılmış formdan gelen ilgi alanlarını, parsed.association_words
+    # ise sadece serbest metinden çıkarılanları kapsıyordu — ikisi ayrı ayrı derlendiği için
+    # örn. formdaki "kahve" ile serbest metindeki "anime" birlikte değerlendirilmiyordu.
+    return provider.enrich_with_interest_associations(merged)
 
 
 def ai_engine_status() -> Dict[str, Any]:

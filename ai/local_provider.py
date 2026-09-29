@@ -117,7 +117,7 @@ class LocalAIProvider(BaseAIProvider):
         # Böylece "köpeği var" gibi basit ama çok değerli bir ipucu, AI kurulu olmasa bile en
         # bilindik köpek isimleriyle karşılık bulur.
         profile = self._enrich_with_unknown_category_guesses(raw_text, profile)
-        profile = self._enrich_with_interest_associations(profile)
+        profile = self.enrich_with_interest_associations(profile)
         return profile
 
     # Türkçe bağlaç/edat/zamir gibi, tek başına hiçbir kişiye özel anlam taşımayan ve
@@ -169,11 +169,19 @@ class LocalAIProvider(BaseAIProvider):
         'gitar': ['Akor', 'Melodi', 'Solo'],
     }
 
-    def _enrich_with_interest_associations(self, profile: TargetProfile) -> TargetProfile:
+    def enrich_with_interest_associations(self, profile: TargetProfile) -> TargetProfile:
         """
         Profildeki her ilgi alanı/kişilik özelliği için (takım isimleri hariç) somut,
         parolada kullanılabilecek çağrışım kelimeleri üretip keywords'e ekler.
         Örn: 'kahve' -> Latte, Americano, Sutlukahve; 'neseli' -> Enerji, Pembe.
+
+        Not: sadece profile.interests'i okur, serbest metne ihtiyaç duymaz — bu yüzden
+        hem serbest metin girilsin girilmesin (CLI/GUI'de "İlgi Alanları" alanı DOĞRUDAN
+        dolduruldğunda da) her zaman çağrılmalıdır. Önceden bu yalnızca extract_target_
+        profile() (serbest metin çözümlemesi) içinde çalıştığı için, kullanıcı ilgi
+        alanını sadece yapılandırılmış forma yazıp serbest metin kutusunu boş bıraktığında
+        (en yaygın kullanım şekli) AI'nın en belirgin "akıllı" özelliği hiç devreye
+        girmiyordu — bkz. gui/backend.py::build_profile_from_form ve main.py'deki çağrı.
         """
         if not profile.interests:
             return profile
@@ -367,12 +375,13 @@ class LocalAIProvider(BaseAIProvider):
         else:
             club_rule = "KURAL: Profilde hiçbir takım/kulüp belirtilmemiş — kesinlikle hiçbir takım sembolü/yılı (1903, bjk, 1907, fener, 1905, gs vb.) EKLEME."
         user = (
-            f"Örnek girdi: isim='Ahmet', tarih='2007', takım='besiktas' -> "
-            f"Örnek çıktı: [\"ahmet2007\", \"Ahmet1903\", \"ahmet_bjk\", \"Bjk.Ahmet\", \"ahmet07\"]\n\n"
+            f"Örnek girdi: isim='Ahmet', tarih='2007', takım='besiktas', özel kelime='mavi' -> "
+            f"Örnek çıktı: [\"ahmet2007\", \"Ahmet1903\", \"ahmet_bjk\", \"Bjk.Ahmet\", \"ahmet07\", \"ahmetmavi\", \"Mavi_Ahmet\"]\n\n"
             f"Şimdi gerçek hedef profili: isimler={profile.names}, tarihler={profile.dates}, "
-            f"konumlar={profile.locations}, ilgi alanları={profile.interests}.\n"
+            f"konumlar={profile.locations}, ilgi alanları={profile.interests}, "
+            f"özel kelimeler/lakap/renk={profile.keywords}.\n"
             f"YUKARIDAKİ ÖRNEĞİ KOPYALAMADAN, bu GERÇEK profile özgü, bu kişinin parola koyarken kullanacağı "
-            f"EN MANTIKLI 20 adet kök kelime/şablon üret (isim+tarih, isim+takım gibi). "
+            f"EN MANTIKLI 20 adet kök kelime/şablon üret (isim+tarih, isim+takım, isim+özel kelime gibi). "
             f"{club_rule} Sadece JSON dizisi olarak yanıt ver, başka hiçbir şey yazma."
         )
         data = local_llm_engine.generate_json(system, user, max_tokens=900)
