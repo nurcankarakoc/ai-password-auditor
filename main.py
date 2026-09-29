@@ -506,6 +506,11 @@ def collect_target_profile_interactively() -> Optional[TargetProfile]:
     # üzerinden) tetikleniyordu; kullanıcı ilgi alanını 4. adımda doğrudan girdiğinde
     # (en yaygın kullanım şekli) AI'nın en belirgin "akıllı" özelliği hiç devreye girmiyordu.
     profile = provider.enrich_with_interest_associations(profile)
+    # "kedi", "köpek", "lakap" gibi bir kategori adının 4./5. adımda TEK BAŞINA yazılması
+    # (örn. kedisinin adını bilmiyor ama "kedi" yazmış) — bu kelimeyi gerçek isim
+    # tahminleriyle (Boncuk, Pamuk vb.) değiştirir; aksi halde "kedi" kelimesi sanki
+    # gerçek bir isimmiş gibi doğrudan kullanılırdı (örn. "SevdaKedi2021" — anlamsız).
+    profile = provider.enrich_with_bare_category_keywords(profile)
 
     if profile.is_empty():
         return None

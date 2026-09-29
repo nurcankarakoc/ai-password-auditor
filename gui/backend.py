@@ -156,7 +156,13 @@ def build_profile_from_form(
     # profile üzerinden) tetikleniyordu; kullanıcı ilgi alanını doğrudan yapılandırılmış
     # forma yazdığında (en yaygın kullanım şekli) AI'nın en belirgin "akıllı" özelliği hiç
     # devreye girmiyordu.
-    return get_active_ai_provider().enrich_with_interest_associations(profile)
+    provider = get_active_ai_provider()
+    profile = provider.enrich_with_interest_associations(profile)
+    # "kedi", "köpek", "lakap" gibi bir kategori adının TEK BAŞINA yazılması (örn. kullanıcı
+    # kedisinin adını bilmiyor ama "kedi" yazmış) — bu kelimeyi gerçek isim tahminleriyle
+    # (Boncuk, Pamuk vb.) değiştirir; aksi halde "kedi" kelimesi sanki gerçek bir isimmiş
+    # gibi doğrudan kullanılırdı (örn. "SevdaKedi2021" — anlamsız).
+    return provider.enrich_with_bare_category_keywords(profile)
 
 
 def enrich_profile_with_free_text(profile: TargetProfile, free_text: str) -> TargetProfile:
@@ -182,7 +188,8 @@ def enrich_profile_with_free_text(profile: TargetProfile, free_text: str) -> Tar
     # (yukarıda) sadece yapılandırılmış formdan gelen ilgi alanlarını, parsed.association_words
     # ise sadece serbest metinden çıkarılanları kapsıyordu — ikisi ayrı ayrı derlendiği için
     # örn. formdaki "kahve" ile serbest metindeki "anime" birlikte değerlendirilmiyordu.
-    return provider.enrich_with_interest_associations(merged)
+    merged = provider.enrich_with_interest_associations(merged)
+    return provider.enrich_with_bare_category_keywords(merged)
 
 
 def ai_engine_status() -> Dict[str, Any]:

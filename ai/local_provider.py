@@ -477,6 +477,53 @@ class LocalAIProvider(BaseAIProvider):
     def _infer_via_heuristic(self, category: str) -> list[str]:
         return list(self.CATEGORY_HEURISTIC_VALUES.get(category, []))
 
+    # Bir kategoriyi TEK BAŞINA (tam cümle değil) adlandıran kelimeler — kullanıcı
+    # yapılandırılmış "İlgi Alanları"/"Özel Kelimeler" alanına doğrudan "kedi", "köpek",
+    # "lakap" gibi bir kategori adı yazdığında (serbest metindeki "kedisi var ama adını
+    # bilmiyorum" gibi TAM CÜMLE gerektiren _detect_unknown_categories_heuristic bunu
+    # YAKALAYAMAZ) eşleşir. Türkçe karakter farkına duyarsız (bkz. _normalize_tr) ve
+    # boşluksuz karşılaştırılır.
+    BARE_CATEGORY_WORDS = {
+        "pet": {"kedi", "kedim", "kedisi", "kopek", "kopegim", "kopegi", "evcilhayvan", "evcilhayvani"},
+        "child": {"cocuk", "cocugum", "cocugu"},
+        "nickname": {"lakap", "lakabi", "lakabim", "takmaad", "takmaadi"},
+        "color": {"renk", "favorirenk", "sevdigirenk"},
+    }
+
+    def enrich_with_bare_category_keywords(self, profile: TargetProfile) -> TargetProfile:
+        """
+        Kullanıcı "kedisi var ama adını bilmiyorum" yerine sadece "kedi" kelimesini
+        yapılandırılmış forma yazdığında, bu kelime önceden GERÇEK bir isimmiş gibi
+        doğrudan kullanılıyordu (örn. "SevdaKedi2021" — kedinin gerçek adı değil,
+        anlamsız). Burada bu kategori adları tespit edilip GERÇEK isim tahminleriyle
+        (infer_unknown_values — Boncuk, Pamuk, Karabaş vb.) DEĞİŞTİRİLİR.
+        """
+        matched: dict[str, str] = {}
+        for value in list(profile.keywords) + list(profile.interests):
+            norm = _normalize_tr(value.lower()).replace(" ", "")
+            for category, bare_words in self.BARE_CATEGORY_WORDS.items():
+                if norm in bare_words:
+                    matched[value] = category
+                    break
+        if not matched:
+            return profile
+
+        extra_keywords = {k for k in profile.keywords if k not in matched}
+        for trigger, category in matched.items():
+            try:
+                guesses = self.infer_unknown_values(category, profile)
+                extra_keywords.update(g.strip().capitalize() for g in guesses if g.strip())
+                logger.info(
+                    f"'{trigger}' kategori adı olarak tespit edildi ({category}); "
+                    f"{len(guesses)} olası gerçek değerle değiştirildi."
+                )
+            except Exception as e:
+                logger.debug(f"'{trigger}' ({category}) için tahmin başarısız oldu: {e}")
+
+        profile.keywords = sorted(extra_keywords)
+        profile.interests = [i for i in profile.interests if i not in matched]
+        return profile
+
     def _generate_roots_via_heuristic(self, profile: TargetProfile) -> list[str]:
         """
         Yapay zeka kapalıyken dahi anlamsal tutarlılığı koruyan (Beşiktaş'a 1907 eklemeyen)
