@@ -421,11 +421,16 @@ class LocalAIProvider(BaseAIProvider):
     }
 
     # Kategori bilinmiyorsa (AI kapalı) kullanılan, Türkiye bağlamında en yaygın değer listeleri.
+    # Not: "pet" listesi kasıtlı olarak SADECE Türkiye'de gerçekten yaygın (Batılı/
+    # "Bella", "Max", "Luna", "Simba" gibi film/dizi kaynaklı isimler DEĞİL) evcil
+    # hayvan isimlerinden oluşur — bu araç Türk kullanıcılar için tasarlandı, en
+    # olası tahmin de buna göre yapılmalı (bkz. kullanıcı geri bildirimi: "Karabaş
+    # gibi olabilir ama sen hep yabancılar gibi düşünmüşsün").
     CATEGORY_HEURISTIC_VALUES = {
         "pet": [
             "Boncuk", "Karabas", "Pamuk", "Zeytin", "Duman", "Minnos", "Comar",
-            "Fistik", "Bobby", "Luna", "Max", "Seker", "Toprak", "Kaplan", "Pofuduk",
-            "Coco", "Findik", "Sisi", "Simba", "Bella"
+            "Fistik", "Seker", "Toprak", "Kaplan", "Pofuduk", "Findik", "Tekir",
+            "Sarman", "Maskara", "Badem", "Cilek", "Pati", "Tarcin"
         ],
         "child": [
             "Ahmet", "Mehmet", "Ali", "Ayse", "Fatma", "Zeynep", "Elif", "Mustafa",
