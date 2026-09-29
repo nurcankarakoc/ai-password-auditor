@@ -363,18 +363,23 @@ class SettingsPage(BasePage):
         self.storage_rows.grid(row=0, column=0, sticky="ew")
         self.storage_rows.grid_columnconfigure(1, weight=1)
 
+    # clearable=True olan satırlar için "🗑️ Temizle" butonu gösterilir. Sadece
+    # HER ZAMAN yeniden üretilebilir/önemsiz içerik (üretilmiş wordlist çıktıları,
+    # loglar) silinebilir kılınır — "Hedef Profilleriniz" (elle girilen OSINT
+    # verisi, kolayca yeniden oluşturulamaz) ve "Yerel AI Modeli" (~1GB, tekrar
+    # indirmek gerekir) KASITLI OLARAK tek tıkla silinemez.
     _STORAGE_ITEMS = [
-        ("📄", "Üretilen Wordlist'ler", "wordlists/generated", "*.txt", "liste"),
-        ("🎯", "Hedef Profilleriniz", "data/synthetic_profiles", "*.json", "hedef"),
-        ("🧠", "Yerel AI Modeli", "models", "*.gguf", "model dosyası"),
-        ("🗒️", "Loglar", "logs", "*", "dosya"),
+        ("📄", "Üretilen Wordlist'ler", "wordlists/generated", "*.txt", "liste", True),
+        ("🎯", "Hedef Profilleriniz", "data/synthetic_profiles", "*.json", "hedef", False),
+        ("🧠", "Yerel AI Modeli", "models", "*.gguf", "model dosyası", False),
+        ("🗒️", "Loglar", "logs", "*", "dosya", True),
     ]
 
     def _render_storage_rows(self) -> None:
         for w in self.storage_rows.winfo_children():
             w.destroy()
 
-        for i, (icon, label, rel_path, glob_pattern, unit) in enumerate(self._STORAGE_ITEMS):
+        for i, (icon, label, rel_path, glob_pattern, unit, clearable) in enumerate(self._STORAGE_ITEMS):
             full_path = BASE_DIR / rel_path
             count = len(list(full_path.glob(glob_pattern))) if full_path.is_dir() else 0
 
@@ -390,7 +395,39 @@ class SettingsPage(BasePage):
             ctk.CTkLabel(row, text=f"{count_text}  ·  ./{rel_path}", font=theme.font(11), text_color=theme.TEXT_SECONDARY, anchor="w") \
                 .grid(row=1, column=1, sticky="w", pady=(0, 10))
 
+            btn_col = ctk.CTkFrame(row, fg_color="transparent")
+            btn_col.grid(row=0, column=2, rowspan=2, padx=(0, 14))
             SecondaryButton(
-                row, text="📂 Klasörü Aç", width=130, height=28, font=theme.font(11), corner_radius=6,
+                btn_col, text="📂 Klasörü Aç", width=130, height=28, font=theme.font(11), corner_radius=6,
                 command=lambda p=full_path: _open_in_file_explorer(p),
-            ).grid(row=0, column=2, rowspan=2, padx=(0, 14))
+            ).pack(side="left")
+            if clearable and count:
+                SecondaryButton(
+                    btn_col, text="🗑️ Temizle", width=100, height=28, font=theme.font(11), corner_radius=6,
+                    command=lambda p=full_path, lbl=label: self._clear_storage_item(p, lbl),
+                ).pack(side="left", padx=(8, 0))
+
+    def _clear_storage_item(self, full_path: Path, label: str) -> None:
+        """Klasördeki TÜM dosyaları, onay aldıktan sonra siler (sadece görünen sayaçtaki
+        glob deseni değil — örn. bir .txt wordlist'in ".txt.metadata.json" eşi de silinsin
+        diye). Bu klasörler (wordlists/generated, logs) zaten tek amaçlıdır, "*" ile
+        temizlemek güvenlidir. Yeniden kurulumda/güncellemede eski test verilerinin
+        klasörde kalıp birikmesini önlemek için — bkz. installer/cybzenor.iss'teki aynı
+        amaçlı [InstallDelete] adımı."""
+        files = [f for f in full_path.glob("*") if f.is_file()] if full_path.is_dir() else []
+        if not files:
+            return
+        if not messagebox.askyesno(
+            "Temizle",
+            f"'{label}' içindeki {len(files):,} dosya kalıcı olarak silinecek. Emin misiniz?"
+        ):
+            return
+        errors = 0
+        for f in files:
+            try:
+                f.unlink()
+            except OSError:
+                errors += 1
+        self._render_storage_rows()
+        if errors:
+            messagebox.showwarning("Temizle", f"{errors} dosya silinemedi (kullanımda olabilir).")

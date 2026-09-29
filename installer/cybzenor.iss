@@ -55,6 +55,19 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+; Ayni klasore yeniden kurulumda (guncelleme) onceki testlerden kalan uretilmis
+; wordlist dosyalari (orn. bir hedefin adiyla kaydedilmis .txt'ler) klasorde
+; kaliyordu -- bunlar tekrar uretilebilir (hedef profilleri AYRI ve KORUNUR,
+; bkz. asagidaki [InstallDelete]), bu yuzden varsayilan olarak temizlenir.
+Name: "cleargenerated"; Description: "Onceki testlerden kalan uretilmis wordlist dosyalarini temizle (hedef profilleri korunur)"; GroupDescription: "Veri"; Flags: checkedonce
+
+[InstallDelete]
+; SADECE uretilmis wordlist ciktilari silinir (her zaman "Wordlist Uret" ile
+; yeniden uretilebilir). data\synthetic_profiles\*.json (kaydedilen hedef
+; profilleri -- kullanicinin elle girdigi OSINT verisi, kolayca yeniden
+; olusturulamaz) ve config/models/logs KASITLI OLARAK bu listede DEGIL,
+; her zaman korunur.
+Type: filesandordirs; Name: "{app}\wordlists\generated"; Tasks: cleargenerated
 
 [Files]
 Source: "..\dist\Cybzenor.exe"; DestDir: "{app}"; Flags: ignoreversion
