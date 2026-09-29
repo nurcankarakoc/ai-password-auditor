@@ -55,19 +55,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
-; Ayni klasore yeniden kurulumda (guncelleme) onceki testlerden kalan uretilmis
-; wordlist dosyalari (orn. bir hedefin adiyla kaydedilmis .txt'ler) klasorde
-; kaliyordu -- bunlar tekrar uretilebilir (hedef profilleri AYRI ve KORUNUR,
-; bkz. asagidaki [InstallDelete]), bu yuzden varsayilan olarak temizlenir.
-Name: "cleargenerated"; Description: "Onceki testlerden kalan uretilmis wordlist dosyalarini temizle (hedef profilleri korunur)"; GroupDescription: "Veri"; Flags: checkedonce
-
-[InstallDelete]
-; SADECE uretilmis wordlist ciktilari silinir (her zaman "Wordlist Uret" ile
-; yeniden uretilebilir). data\synthetic_profiles\*.json (kaydedilen hedef
-; profilleri -- kullanicinin elle girdigi OSINT verisi, kolayca yeniden
-; olusturulamaz) ve config/models/logs KASITLI OLARAK bu listede DEGIL,
-; her zaman korunur.
-Type: filesandordirs; Name: "{app}\wordlists\generated"; Tasks: cleargenerated
 
 [Files]
 Source: "..\dist\Cybzenor.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -79,3 +66,15 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Cybzenor bir güvenlik/parola denetim aracı olduğu için, KALDIRILDIĞINDA
+; ürettiği HER ŞEY (üretilen wordlist'ler, hedef profilleri, loglar) bilgisayarda
+; İZ BIRAKMADAN silinir — bu ONAY GEREKTİRMEZ, çünkü "uygulamayı kaldırdığımda
+; hassas veriler de gitsin" beklentisi bu tür bir aracın DOĞASI gereği zaten
+; varsayılan olmalı (örn. bilgisayar el değiştirirse). Kurulum/güncelleme
+; sırasında bu veriler KORUNUR — sadece kaldırma işleminde silinir.
+Type: filesandordirs; Name: "{app}\wordlists\generated"
+Type: filesandordirs; Name: "{app}\data"
+Type: filesandordirs; Name: "{app}\logs"
+Type: filesandordirs; Name: "{app}\reports"
